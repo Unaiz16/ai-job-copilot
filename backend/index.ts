@@ -1,5 +1,5 @@
 
-import express, { Express, Request, Response, NextFunction } from 'express';
+import express, { Express, Request as ExpressRequest, Response as ExpressResponse, NextFunction } from 'express';
 import dotenv from 'dotenv';
 import cors from 'cors';
 import { supabase } from './supabaseClient';
@@ -23,27 +23,33 @@ if (process.env.API_KEY) {
 // Middlewares
 app.use(express.json({ limit: '10mb' }));
 
-// CORS configuration to allow requests from the Google AI Studio frontend
+// CORS configuration to allow requests from Google's dynamic frontend environments
 const corsOptions: cors.CorsOptions = {
   origin: (origin, callback) => {
+    // Allow requests with no origin (like mobile apps or curl requests)
     if (!origin) return callback(null, true);
 
+    // Whitelist of allowed domain suffixes
+    const allowedDomainSuffixes = [
+        '.google-labs-studio.web.app',
+        '.scf.usercontent.goog', // From user logs
+        '.render.com' // Allow backend to be called from other render services
+    ];
+
     try {
-      const originHostname = new URL(origin).hostname;
-      if (originHostname.endsWith('.google-labs-studio.web.app') || originHostname === 'google-labs-studio.web.app') {
-        return callback(null, true);
-      }
+        const originHostname = new URL(origin).hostname;
+        if (allowedDomainSuffixes.some(suffix => originHostname.endsWith(suffix))) {
+            return callback(null, true); // Allow if origin ends with a whitelisted suffix
+        }
     } catch (e: any) {
-        // Fallback for invalid origin format
+        // The origin is not a valid URL, reject it
+        console.error(`Invalid CORS origin received: ${origin}`, e);
+        return callback(new Error('Invalid Origin'));
     }
     
-    const whitelist = ['https://google-labs-studio.web.app'];
-    if (whitelist.includes(origin)) {
-      return callback(null, true);
-    }
-
-    console.error(`CORS policy does not allow access from origin: ${origin}`);
-    return callback(new Error(`Not allowed by CORS`));
+    // If not in whitelist, reject the request
+    console.error(`CORS policy rejection for origin: ${origin}`);
+    return callback(new Error('Not allowed by CORS'));
   },
 };
 app.use(cors(corsOptions));
@@ -52,33 +58,35 @@ app.use(cors(corsOptions));
 // --- API ROUTES ---
 
 // Health Check
-app.get('/api', (req: Request, res: Response) => {
+app.get('/api', (req: ExpressRequest, res: ExpressResponse) => {
   res.status(200).send('AI Job Copilot Backend is running!');
 });
 
 // Middleware to check for DB and AI connections
-const checkDbConnection = (req: Request, res: Response, next: NextFunction) => {
+const checkDbConnection = (req: ExpressRequest, res: ExpressResponse, next: NextFunction) => {
   if (!supabase) {
     return res.status(503).json({ message: 'Database service is not configured on the server.' });
   }
   next();
 };
 
-const checkAiConnection = (req: Request, res: Response, next: NextFunction) => {
+const checkAiConnection = (req: ExpressRequest, res: ExpressResponse, next: NextFunction) => {
     if(!ai) {
         return res.status(503).json({ message: 'AI service is not configured on the server.' });
     }
     next();
 }
 
-const handleApiError = (error: any, res: Response, endpoint: string) => {
+const handleApiError = (error: any, res: ExpressResponse, endpoint: string) => {
     console.error(`Error in ${endpoint}:`, error);
     res.status(500).json({ message: `Failed in ${endpoint}: ${error.message}`});
 }
 
 const safeJsonParse = (jsonString: string) => {
     try {
-        return JSON.parse(jsonString.trim());
+        // Attempt to remove common markdown code fences
+        const cleanedString = jsonString.trim().replace(/^```json\n/, '').replace(/\n```$/, '');
+        return JSON.parse(cleanedString);
     } catch {
         console.error("Failed to parse JSON string:", jsonString);
         throw new Error("Received malformed JSON from AI model.");
@@ -93,53 +101,73 @@ const DUMMY_USER_ID = 1;
 const DUMMY_USER_UUID = '00000000-0000-0000-0000-000000000000';
 
 // Profile
-dataRouter.get('/profile', async (req: Request, res: Response) => {
-    const { data, error } = await supabase!.from('profiles').select('*').eq('id', DUMMY_USER_ID).single();
-    if (error && error.code !== 'PGRST116') {
-        return handleApiError(error, res, 'getProfile');
+dataRouter.get('/profile', async (req: ExpressRequest, res: ExpressResponse) => {
+    try {
+        const { data, error } = await supabase!.from('profiles').select('*').eq('id', DUMMY_USER_ID).single();
+        if (error && error.code !== 'PGRST116') { // Ignore 'single row not found' error
+            return handleApiError(error, res, 'getProfile');
+        }
+        res.status(200).json(data);
+    } catch (e: any) {
+        handleApiError(e, res, 'getProfile');
     }
-    res.status(200).json(data);
 });
 
-dataRouter.post('/profile', async (req: Request, res: Response) => {
-    const profileData = req.body;
-    const { data, error } = await supabase!.from('profiles').upsert({ ...profileData, id: DUMMY_USER_ID }).select().single();
-     if (error) return handleApiError(error, res, 'saveProfile');
-    res.status(200).json(data);
+dataRouter.post('/profile', async (req: ExpressRequest, res: ExpressResponse) => {
+    try {
+        const profileData = req.body;
+        const { data, error } = await supabase!.from('profiles').upsert({ ...profileData, id: DUMMY_USER_ID }).select().single();
+         if (error) return handleApiError(error, res, 'saveProfile');
+        res.status(200).json(data);
+    } catch (e: any) {
+        handleApiError(e, res, 'saveProfile');
+    }
 });
 
 // Generic function for handling data sync
-const syncTable = async (req: Request, res: Response, tableName: string) => {
-    const items = req.body;
-    
-    const { error: deleteError } = await supabase!.from(tableName).delete().eq('user_id', DUMMY_USER_UUID);
-    if (deleteError) return handleApiError(deleteError, res, `delete from ${tableName}`);
+const syncTable = async (req: ExpressRequest, res: ExpressResponse, tableName: string) => {
+    try {
+        const items = req.body;
+        
+        const { error: deleteError } = await supabase!.from(tableName).delete().eq('user_id', DUMMY_USER_UUID);
+        if (deleteError) return handleApiError(deleteError, res, `delete from ${tableName}`);
 
-    if (items && items.length > 0) {
-        const itemsToInsert = items.map((item: any) => ({ ...item, user_id: DUMMY_USER_UUID }));
-        const { data, error: insertError } = await supabase!.from(tableName).insert(itemsToInsert).select();
-        if (insertError) return handleApiError(insertError, res, `insert into ${tableName}`);
-        return res.status(200).json(data);
+        if (items && items.length > 0) {
+            const itemsToInsert = items.map((item: any) => ({ ...item, user_id: DUMMY_USER_UUID }));
+            const { data, error: insertError } = await supabase!.from(tableName).insert(itemsToInsert).select();
+            if (insertError) return handleApiError(insertError, res, `insert into ${tableName}`);
+            return res.status(200).json(data);
+        }
+
+        return res.status(200).json([]);
+    } catch (e: any) {
+        handleApiError(e, res, `syncTable for ${tableName}`);
     }
-
-    return res.status(200).json([]);
 };
 
 // Applications
-dataRouter.get('/applications', async (req: Request, res: Response) => {
-    const { data, error } = await supabase!.from('applications').select('*').eq('user_id', DUMMY_USER_UUID);
-    if (error) return handleApiError(error, res, 'getApplications');
-    res.status(200).json(data);
+dataRouter.get('/applications', async (req: ExpressRequest, res: ExpressResponse) => {
+    try {
+        const { data, error } = await supabase!.from('applications').select('*').eq('user_id', DUMMY_USER_UUID);
+        if (error) return handleApiError(error, res, 'getApplications');
+        res.status(200).json(data);
+    } catch (e: any) {
+        handleApiError(e, res, 'getApplications');
+    }
 });
-dataRouter.post('/applications', (req: Request, res: Response) => syncTable(req, res, 'applications'));
+dataRouter.post('/applications', (req: ExpressRequest, res: ExpressResponse) => syncTable(req, res, 'applications'));
 
 // Experiments
-dataRouter.get('/experiments', async (req: Request, res: Response) => {
-    const { data, error } = await supabase!.from('experiments').select('*').eq('user_id', DUMMY_USER_UUID);
-    if (error) return handleApiError(error, res, 'getExperiments');
-    res.status(200).json(data);
+dataRouter.get('/experiments', async (req: ExpressRequest, res: ExpressResponse) => {
+    try {
+        const { data, error } = await supabase!.from('experiments').select('*').eq('user_id', DUMMY_USER_UUID);
+        if (error) return handleApiError(error, res, 'getExperiments');
+        res.status(200).json(data);
+    } catch (e: any) {
+        handleApiError(e, res, 'getExperiments');
+    }
 });
-dataRouter.post('/experiments', (req: Request, res: Response) => syncTable(req, res, 'experiments'));
+dataRouter.post('/experiments', (req: ExpressRequest, res: ExpressResponse) => syncTable(req, res, 'experiments'));
 
 app.use('/api/data', checkDbConnection, dataRouter);
 
@@ -174,7 +202,7 @@ const jobsResponseSchema = {
     required: ['jobs']
 }
 
-aiRouter.post('/generate-jobs', async (req: Request, res: Response) => {
+aiRouter.post('/generate-jobs', async (req: ExpressRequest, res: ExpressResponse) => {
     const { profile } = req.body;
     const prompt = `Act as a senior IT recruiter in Germany. Based on the following candidate profile, find 5-7 highly relevant, recent job openings. The candidate must meet at least 80% of the requirements. Provide a fit score and a one-sentence reasoning for each.
     
@@ -192,13 +220,13 @@ aiRouter.post('/generate-jobs', async (req: Request, res: Response) => {
             model: 'gemini-2.5-flash', contents: prompt,
             config: { responseMimeType: "application/json", responseSchema: jobsResponseSchema }
         });
-        res.status(200).json(safeJsonParse(response.text ?? '{}'));
+        res.status(200).json(safeJsonParse(response.text ?? '{"jobs":[]}'));
     } catch(error: any) {
         handleApiError(error, res, 'generate-jobs');
     }
 });
 
-aiRouter.post('/generate-cv', async (req: Request, res: Response) => {
+aiRouter.post('/generate-cv', async (req: ExpressRequest, res: ExpressResponse) => {
     const { profile, job, activeExperiments } = req.body;
     let experimentInstructions = 'No active experiments.';
     if(activeExperiments && activeExperiments.length > 0) {
@@ -236,7 +264,7 @@ Return ONLY the full text of the tailored CV, with no extra commentary.`;
 });
 
 
-aiRouter.post('/generate-cover-letter', async (req: Request, res: Response) => {
+aiRouter.post('/generate-cover-letter', async (req: ExpressRequest, res: ExpressResponse) => {
     const { profile, job } = req.body;
     const prompt = `Act as a professional career coach. Write a compelling and concise cover letter for the user, tailored to the specific job. The tone should be professional but enthusiastic.
 
@@ -276,7 +304,7 @@ const extractedProfileSchema = {
     }
 };
 
-aiRouter.post('/extract-profile', async (req: Request, res: Response) => {
+aiRouter.post('/extract-profile', async (req: ExpressRequest, res: ExpressResponse) => {
     const { cvData, linkedinUrl, artifacts } = req.body;
     const prompt = `Analyze the provided career data (CV, LinkedIn URL, and other artifacts) and extract key information into a structured JSON object. Infer and synthesize where necessary.
     
@@ -296,7 +324,7 @@ aiRouter.post('/extract-profile', async (req: Request, res: Response) => {
     }
 });
 
-aiRouter.post('/clarifying-questions', async (req: Request, res: Response) => {
+aiRouter.post('/clarifying-questions', async (req: ExpressRequest, res: ExpressResponse) => {
     const { extractedProfile } = req.body;
     const prompt = `Based on this extracted user profile, identify any vague or missing information. Formulate 2-3 friendly, concise questions to ask the user to clarify these points.
     
@@ -311,7 +339,7 @@ aiRouter.post('/clarifying-questions', async (req: Request, res: Response) => {
     }
 });
 
-aiRouter.post('/suggest-roles', async (req: Request, res: Response) => {
+aiRouter.post('/suggest-roles', async (req: ExpressRequest, res: ExpressResponse) => {
     const { profile } = req.body;
     const prompt = `Based on the user's profile, suggest 3-5 alternative or related job roles they might be qualified for and interested in.
     
@@ -324,13 +352,13 @@ aiRouter.post('/suggest-roles', async (req: Request, res: Response) => {
             model: 'gemini-2.5-flash', contents: prompt,
             config: { responseMimeType: "application/json", responseSchema: schema }
         });
-        res.status(200).json(safeJsonParse(response.text ?? '{}'));
+        res.status(200).json(safeJsonParse(response.text ?? '{"roles":[]}'));
     } catch (error: any) {
         handleApiError(error, res, 'suggest-roles');
     }
 });
 
-aiRouter.post('/interview-prep', async (req: Request, res: Response) => {
+aiRouter.post('/interview-prep', async (req: ExpressRequest, res: ExpressResponse) => {
     const { profile, application } = req.body;
     const prompt = `Generate a comprehensive but concise interview preparation kit in Markdown format for the following user and application.
     
@@ -358,7 +386,7 @@ aiRouter.post('/interview-prep', async (req: Request, res: Response) => {
     }
 });
 
-aiRouter.post('/analyze-audio', async (req: Request, res: Response) => {
+aiRouter.post('/analyze-audio', async (req: ExpressRequest, res: ExpressResponse) => {
     const { profile, application, question, audioBase64, audioMimeType } = req.body;
     
     const audioPart = { inlineData: { mimeType: audioMimeType, data: audioBase64 } };
@@ -381,7 +409,7 @@ aiRouter.post('/analyze-audio', async (req: Request, res: Response) => {
 });
 
 
-aiRouter.post('/performance-insights', async (req: Request, res: Response) => {
+aiRouter.post('/performance-insights', async (req: ExpressRequest, res: ExpressResponse) => {
     const { profile, applications } = req.body;
     const prompt = `Act as an expert career strategist. Analyze the user's application history to identify patterns and suggest improvements.
     
@@ -436,7 +464,7 @@ aiRouter.post('/performance-insights', async (req: Request, res: Response) => {
 
 
 // Chat Endpoints
-aiRouter.post('/chat/send-message', async (req: Request, res: Response) => {
+aiRouter.post('/chat/send-message', async (req: ExpressRequest, res: ExpressResponse) => {
     const { message, systemInstruction } = req.body;
     if (!message || !systemInstruction) return res.status(400).json({ message: 'Message and systemInstruction are required.' });
     
@@ -449,7 +477,7 @@ aiRouter.post('/chat/send-message', async (req: Request, res: Response) => {
     }
 });
 
-aiRouter.post('/chat/parse-command', async (req: Request, res: Response) => {
+aiRouter.post('/chat/parse-command', async (req: ExpressRequest, res: ExpressResponse) => {
     const { userText } = req.body;
     const commandSchema = {
         type: Type.OBJECT,
@@ -485,15 +513,15 @@ aiRouter.post('/chat/parse-command', async (req: Request, res: Response) => {
 app.use('/api/ai', checkAiConnection, aiRouter);
 
 const automationRouter = express.Router();
-automationRouter.post('/easy-apply', (req: Request, res: Response) => res.status(200).json({ success: false, log: ['[BE-INFO] "Easy Apply" is not a real feature. This is a mock response.'] }));
-automationRouter.post('/complex-apply', (req: Request, res: Response) => res.status(200).json({ success: false, log: ['[BE-INFO] "Complex Apply" is not a real feature. This is a mock response.'] }));
+automationRouter.post('/easy-apply', (req: ExpressRequest, res: ExpressResponse) => res.status(200).json({ success: false, log: ['[BE-INFO] "Easy Apply" is not a real feature. This is a mock response.'] }));
+automationRouter.post('/complex-apply', (req: ExpressRequest, res: ExpressResponse) => res.status(200).json({ success: false, log: ['[BE-INFO] "Complex Apply" is not a real feature. This is a mock response.'] }));
 app.use('/api/automation', automationRouter);
 
 const gdriveRouter = express.Router();
-gdriveRouter.post('/save-file', (req: Request, res: Response) => res.status(200).json({ url: `https://docs.google.com/document/d/mock-gdrive-id/edit` }));
-gdriveRouter.post('/create-sheet', (req: Request, res: Response) => res.status(200).json({ id: `sheet_mock_id`, url: `https://docs.google.com/spreadsheets/d/sheet_mock_id/edit` }));
-gdriveRouter.post('/sync-to-sheet', (req: Request, res: Response) => res.status(200).json({ success: true }));
-gdriveRouter.post('/sync-from-sheet', (req: Request, res: Response) => res.status(200).json({ applications: [] }));
+gdriveRouter.post('/save-file', (req: ExpressRequest, res: ExpressResponse) => res.status(200).json({ url: `https://docs.google.com/document/d/mock-gdrive-id/edit` }));
+gdriveRouter.post('/create-sheet', (req: ExpressRequest, res: ExpressResponse) => res.status(200).json({ id: `sheet_mock_id`, url: `https://docs.google.com/spreadsheets/d/sheet_mock_id/edit` }));
+gdriveRouter.post('/sync-to-sheet', (req: ExpressRequest, res: ExpressResponse) => res.status(200).json({ success: true }));
+gdriveRouter.post('/sync-from-sheet', (req: ExpressRequest, res: ExpressResponse) => res.status(200).json({ applications: [] }));
 app.use('/api/gdrive', gdriveRouter);
 
 
