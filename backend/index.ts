@@ -1,5 +1,5 @@
 
-import express from 'express';
+import express, { Express, Request, Response, NextFunction } from 'express';
 import dotenv from 'dotenv';
 import cors from 'cors';
 import { supabase } from './supabaseClient';
@@ -7,7 +7,7 @@ import { GoogleGenAI, Type } from '@google/genai';
 
 dotenv.config();
 
-const app: express.Express = express();
+const app: Express = express();
 const port = process.env.PORT || 3001;
 
 // --- Initialize Gemini ---
@@ -26,26 +26,22 @@ app.use(express.json({ limit: '10mb' }));
 // CORS configuration to allow requests from the Google AI Studio frontend
 const corsOptions: cors.CorsOptions = {
   origin: (origin, callback) => {
-    // Allow requests with no origin (like mobile apps, curl, Postman)
     if (!origin) return callback(null, true);
 
     try {
-      // AI Studio uses dynamic subdomains, so we check if the origin's hostname ends with the base domain.
       const originHostname = new URL(origin).hostname;
       if (originHostname.endsWith('.google-labs-studio.web.app') || originHostname === 'google-labs-studio.web.app') {
         return callback(null, true);
       }
     } catch (e: any) {
-      // Invalid origin format, proceed to static check if needed
+        // Fallback for invalid origin format
     }
     
-    // Fallback for safety, although the dynamic check should cover it.
     const whitelist = ['https://google-labs-studio.web.app'];
     if (whitelist.includes(origin)) {
       return callback(null, true);
     }
 
-    // If origin doesn't match, block it.
     console.error(`CORS policy does not allow access from origin: ${origin}`);
     return callback(new Error(`Not allowed by CORS`));
   },
@@ -56,26 +52,26 @@ app.use(cors(corsOptions));
 // --- API ROUTES ---
 
 // Health Check
-app.get('/api', (req: express.Request, res: express.Response) => {
+app.get('/api', (req: Request, res: Response) => {
   res.status(200).send('AI Job Copilot Backend is running!');
 });
 
 // Middleware to check for DB and AI connections
-const checkDbConnection = (req: express.Request, res: express.Response, next: express.NextFunction) => {
+const checkDbConnection = (req: Request, res: Response, next: NextFunction) => {
   if (!supabase) {
     return res.status(503).json({ message: 'Database service is not configured on the server.' });
   }
   next();
 };
 
-const checkAiConnection = (req: express.Request, res: express.Response, next: express.NextFunction) => {
+const checkAiConnection = (req: Request, res: Response, next: NextFunction) => {
     if(!ai) {
         return res.status(503).json({ message: 'AI service is not configured on the server.' });
     }
     next();
 }
 
-const handleApiError = (error: any, res: express.Response, endpoint: string) => {
+const handleApiError = (error: any, res: Response, endpoint: string) => {
     console.error(`Error in ${endpoint}:`, error);
     res.status(500).json({ message: `Failed in ${endpoint}: ${error.message}`});
 }
@@ -93,27 +89,27 @@ const safeJsonParse = (jsonString: string) => {
 // --- Data Persistence Routes ---
 const dataRouter = express.Router();
 
-const DUMMY_USER_ID = 1; // Corresponds to the single profile row with id=1
-const DUMMY_USER_UUID = '00000000-0000-0000-0000-000000000000'; // For tables with UUID foreign key
+const DUMMY_USER_ID = 1; 
+const DUMMY_USER_UUID = '00000000-0000-0000-0000-000000000000';
 
 // Profile
-dataRouter.get('/profile', async (req: express.Request, res: express.Response) => {
+dataRouter.get('/profile', async (req: Request, res: Response) => {
     const { data, error } = await supabase!.from('profiles').select('*').eq('id', DUMMY_USER_ID).single();
-    if (error && error.code !== 'PGRST116') { // Ignore 'exact one row not found'
+    if (error && error.code !== 'PGRST116') {
         return handleApiError(error, res, 'getProfile');
     }
     res.status(200).json(data);
 });
 
-dataRouter.post('/profile', async (req: express.Request, res: express.Response) => {
+dataRouter.post('/profile', async (req: Request, res: Response) => {
     const profileData = req.body;
     const { data, error } = await supabase!.from('profiles').upsert({ ...profileData, id: DUMMY_USER_ID }).select().single();
      if (error) return handleApiError(error, res, 'saveProfile');
     res.status(200).json(data);
 });
 
-// Generic function for handling data sync (applications, experiments)
-const syncTable = async (req: express.Request, res: express.Response, tableName: string) => {
+// Generic function for handling data sync
+const syncTable = async (req: Request, res: Response, tableName: string) => {
     const items = req.body;
     
     const { error: deleteError } = await supabase!.from(tableName).delete().eq('user_id', DUMMY_USER_UUID);
@@ -130,20 +126,20 @@ const syncTable = async (req: express.Request, res: express.Response, tableName:
 };
 
 // Applications
-dataRouter.get('/applications', async (req: express.Request, res: express.Response) => {
+dataRouter.get('/applications', async (req: Request, res: Response) => {
     const { data, error } = await supabase!.from('applications').select('*').eq('user_id', DUMMY_USER_UUID);
     if (error) return handleApiError(error, res, 'getApplications');
     res.status(200).json(data);
 });
-dataRouter.post('/applications', (req: express.Request, res: express.Response) => syncTable(req, res, 'applications'));
+dataRouter.post('/applications', (req: Request, res: Response) => syncTable(req, res, 'applications'));
 
 // Experiments
-dataRouter.get('/experiments', async (req: express.Request, res: express.Response) => {
+dataRouter.get('/experiments', async (req: Request, res: Response) => {
     const { data, error } = await supabase!.from('experiments').select('*').eq('user_id', DUMMY_USER_UUID);
     if (error) return handleApiError(error, res, 'getExperiments');
     res.status(200).json(data);
 });
-dataRouter.post('/experiments', (req: express.Request, res: express.Response) => syncTable(req, res, 'experiments'));
+dataRouter.post('/experiments', (req: Request, res: Response) => syncTable(req, res, 'experiments'));
 
 app.use('/api/data', checkDbConnection, dataRouter);
 
@@ -178,16 +174,16 @@ const jobsResponseSchema = {
     required: ['jobs']
 }
 
-aiRouter.post('/generate-jobs', async (req: express.Request, res: express.Response) => {
+aiRouter.post('/generate-jobs', async (req: Request, res: Response) => {
     const { profile } = req.body;
     const prompt = `Act as a senior IT recruiter in Germany. Based on the following candidate profile, find 5-7 highly relevant, recent job openings. The candidate must meet at least 80% of the requirements. Provide a fit score and a one-sentence reasoning for each.
     
     Candidate Profile:
-    - Target Roles: ${profile.jobRoles}
-    - Target Locations: ${profile.locations}
-    - Key Skills: ${profile.keySkills}
-    - Experience: ${profile.yearsOfExperience}
-    - Summary: ${profile.summary}
+    - Target Roles: ${profile.jobRoles ?? ''}
+    - Target Locations: ${profile.locations ?? ''}
+    - Key Skills: ${profile.keySkills ?? ''}
+    - Experience: ${profile.yearsOfExperience ?? ''}
+    - Summary: ${profile.summary ?? ''}
 
     Return the results in a JSON object.`;
 
@@ -196,13 +192,13 @@ aiRouter.post('/generate-jobs', async (req: express.Request, res: express.Respon
             model: 'gemini-2.5-flash', contents: prompt,
             config: { responseMimeType: "application/json", responseSchema: jobsResponseSchema }
         });
-        res.status(200).json(safeJsonParse(response.text));
+        res.status(200).json(safeJsonParse(response.text ?? '{}'));
     } catch(error: any) {
         handleApiError(error, res, 'generate-jobs');
     }
 });
 
-aiRouter.post('/generate-cv', async (req: express.Request, res: express.Response) => {
+aiRouter.post('/generate-cv', async (req: Request, res: Response) => {
     const { profile, job, activeExperiments } = req.body;
     let experimentInstructions = 'No active experiments.';
     if(activeExperiments && activeExperiments.length > 0) {
@@ -211,20 +207,20 @@ aiRouter.post('/generate-cv', async (req: express.Request, res: express.Response
     const prompt = `Act as a professional resume writer. Your task is to rewrite and tailor the user's Base CV to perfectly match the provided Job Description. The tailored CV should be ATS-friendly, use strong action verbs, and quantify achievements where possible.
 
 User's Profile:
-- Name: ${profile.name}
-- Summary: ${profile.summary}
-- Key Skills: ${profile.keySkills}
+- Name: ${profile.name ?? ''}
+- Summary: ${profile.summary ?? ''}
+- Key Skills: ${profile.keySkills ?? ''}
 
 Base CV Content:
 ---
-${profile.baseCV}
+${profile.baseCV ?? ''}
 ---
 
 Target Job Description:
 ---
-Company: ${job.company}
-Title: ${job.title}
-Description: ${job.description}
+Company: ${job.company ?? ''}
+Title: ${job.title ?? ''}
+Description: ${job.description ?? ''}
 ---
 
 Active Strategy Experiments:
@@ -233,32 +229,32 @@ ${experimentInstructions}
 Return ONLY the full text of the tailored CV, with no extra commentary.`;
     try {
         const response = await ai!.models.generateContent({ model: 'gemini-2.5-flash', contents: prompt });
-        res.status(200).json({ text: response.text });
+        res.status(200).json({ text: response.text ?? '' });
     } catch (error: any) {
         handleApiError(error, res, 'generate-cv');
     }
 });
 
 
-aiRouter.post('/generate-cover-letter', async (req: express.Request, res: express.Response) => {
+aiRouter.post('/generate-cover-letter', async (req: Request, res: Response) => {
     const { profile, job } = req.body;
     const prompt = `Act as a professional career coach. Write a compelling and concise cover letter for the user, tailored to the specific job. The tone should be professional but enthusiastic.
 
 User's Profile:
-- Name: ${profile.name}
-- Summary: ${profile.summary}
-- Key Skills: ${profile.keySkills}
-- Base CV: ${profile.baseCV}
+- Name: ${profile.name ?? ''}
+- Summary: ${profile.summary ?? ''}
+- Key Skills: ${profile.keySkills ?? ''}
+- Base CV: ${profile.baseCV ?? ''}
 
 Target Job:
-- Company: ${job.company}
-- Title: ${job.title}
-- Description: ${job.description}
+- Company: ${job.company ?? ''}
+- Title: ${job.title ?? ''}
+- Description: ${job.description ?? ''}
 
 Return ONLY the text of the cover letter.`;
     try {
         const response = await ai!.models.generateContent({ model: 'gemini-2.5-flash', contents: prompt });
-        res.status(200).json({ text: response.text });
+        res.status(200).json({ text: response.text ?? '' });
     } catch (error: any) {
         handleApiError(error, res, 'generate-cover-letter');
     }
@@ -280,13 +276,13 @@ const extractedProfileSchema = {
     }
 };
 
-aiRouter.post('/extract-profile', async (req: express.Request, res: express.Response) => {
+aiRouter.post('/extract-profile', async (req: Request, res: Response) => {
     const { cvData, linkedinUrl, artifacts } = req.body;
     const prompt = `Analyze the provided career data (CV, LinkedIn URL, and other artifacts) and extract key information into a structured JSON object. Infer and synthesize where necessary.
     
-    CV Data: ${JSON.stringify(cvData)}
-    LinkedIn Profile: ${linkedinUrl || 'Not provided.'}
-    Other Artifacts: ${JSON.stringify(artifacts) || 'Not provided.'}
+    CV Data: ${JSON.stringify(cvData) ?? ''}
+    LinkedIn Profile: ${linkedinUrl ?? 'Not provided.'}
+    Other Artifacts: ${JSON.stringify(artifacts) ?? 'Not provided.'}
 
     Return ONLY the structured JSON object.`;
      try {
@@ -294,32 +290,32 @@ aiRouter.post('/extract-profile', async (req: express.Request, res: express.Resp
             model: 'gemini-2.5-flash', contents: prompt,
             config: { responseMimeType: "application/json", responseSchema: extractedProfileSchema }
         });
-        res.status(200).json(safeJsonParse(response.text));
+        res.status(200).json(safeJsonParse(response.text ?? '{}'));
     } catch (error: any) {
         handleApiError(error, res, 'extract-profile');
     }
 });
 
-aiRouter.post('/clarifying-questions', async (req: express.Request, res: express.Response) => {
+aiRouter.post('/clarifying-questions', async (req: Request, res: Response) => {
     const { extractedProfile } = req.body;
     const prompt = `Based on this extracted user profile, identify any vague or missing information. Formulate 2-3 friendly, concise questions to ask the user to clarify these points.
     
-    Profile: ${JSON.stringify(extractedProfile)}
+    Profile: ${JSON.stringify(extractedProfile) ?? ''}
     
     Return ONLY the text of the questions.`;
     try {
         const response = await ai!.models.generateContent({ model: 'gemini-2.5-flash', contents: prompt });
-        res.status(200).json({ text: response.text });
+        res.status(200).json({ text: response.text ?? '' });
     } catch (error: any) {
         handleApiError(error, res, 'clarifying-questions');
     }
 });
 
-aiRouter.post('/suggest-roles', async (req: express.Request, res: express.Response) => {
+aiRouter.post('/suggest-roles', async (req: Request, res: Response) => {
     const { profile } = req.body;
     const prompt = `Based on the user's profile, suggest 3-5 alternative or related job roles they might be qualified for and interested in.
     
-    Profile: ${JSON.stringify(profile)}
+    Profile: ${JSON.stringify(profile) ?? ''}
     
     Return a JSON object with a single key "roles" which is an array of strings.`;
     const schema = { type: Type.OBJECT, properties: { roles: { type: Type.ARRAY, items: { type: Type.STRING } } }, required: ['roles'] };
@@ -328,25 +324,25 @@ aiRouter.post('/suggest-roles', async (req: express.Request, res: express.Respon
             model: 'gemini-2.5-flash', contents: prompt,
             config: { responseMimeType: "application/json", responseSchema: schema }
         });
-        res.status(200).json(safeJsonParse(response.text));
+        res.status(200).json(safeJsonParse(response.text ?? '{}'));
     } catch (error: any) {
         handleApiError(error, res, 'suggest-roles');
     }
 });
 
-aiRouter.post('/interview-prep', async (req: express.Request, res: express.Response) => {
+aiRouter.post('/interview-prep', async (req: Request, res: Response) => {
     const { profile, application } = req.body;
     const prompt = `Generate a comprehensive but concise interview preparation kit in Markdown format for the following user and application.
     
     User Profile:
-    - Role: ${profile.jobRoles}
-    - Experience: ${profile.yearsOfExperience}
-    - Summary: ${profile.summary}
+    - Role: ${profile.jobRoles ?? ''}
+    - Experience: ${profile.yearsOfExperience ?? ''}
+    - Summary: ${profile.summary ?? ''}
 
     Application:
-    - Company: ${application.company}
-    - Title: ${application.title}
-    - Description: ${application.description}
+    - Company: ${application.company ?? ''}
+    - Title: ${application.title ?? ''}
+    - Description: ${application.description ?? ''}
 
     The kit should include:
     1.  Key Company Information (mission, recent news).
@@ -356,20 +352,20 @@ aiRouter.post('/interview-prep', async (req: express.Request, res: express.Respo
     Return ONLY the markdown text.`;
     try {
         const response = await ai!.models.generateContent({ model: 'gemini-2.5-flash', contents: prompt });
-        res.status(200).json({ text: response.text });
+        res.status(200).json({ text: response.text ?? '' });
     } catch (error: any) {
         handleApiError(error, res, 'interview-prep');
     }
 });
 
-aiRouter.post('/analyze-audio', async (req: express.Request, res: express.Response) => {
+aiRouter.post('/analyze-audio', async (req: Request, res: Response) => {
     const { profile, application, question, audioBase64, audioMimeType } = req.body;
     
     const audioPart = { inlineData: { mimeType: audioMimeType, data: audioBase64 } };
     const textPart = { text: `A candidate is answering an interview question.
     - Question: "${question}"
-    - Candidate's Role: ${profile.jobRoles}
-    - Target Job: ${application.title} at ${application.company}
+    - Candidate's Role: ${profile.jobRoles ?? ''}
+    - Target Job: ${application.title ?? ''} at ${application.company ?? ''}
     
     Please analyze the candidate's spoken answer (provided as audio). Provide feedback in Markdown on clarity, confidence, relevance, and structure (like the STAR method). Offer specific, constructive advice for improvement.`};
     
@@ -378,23 +374,23 @@ aiRouter.post('/analyze-audio', async (req: express.Request, res: express.Respon
             model: 'gemini-2.5-flash',
             contents: { parts: [textPart, audioPart] }
         });
-        res.status(200).json({ text: response.text });
+        res.status(200).json({ text: response.text ?? '' });
     } catch (error: any) {
         handleApiError(error, res, 'analyze-audio');
     }
 });
 
 
-aiRouter.post('/performance-insights', async (req: express.Request, res: express.Response) => {
+aiRouter.post('/performance-insights', async (req: Request, res: Response) => {
     const { profile, applications } = req.body;
     const prompt = `Act as an expert career strategist. Analyze the user's application history to identify patterns and suggest improvements.
     
     User Profile:
-    - Target Roles: ${profile.jobRoles}
-    - Key Skills: ${profile.keySkills}
+    - Target Roles: ${profile.jobRoles ?? ''}
+    - Key Skills: ${profile.keySkills ?? ''}
 
     Application History (last 20):
-    ${JSON.stringify(applications.slice(0, 20), null, 2)}
+    ${JSON.stringify(applications.slice(0, 20), null, 2) ?? ''}
 
     Based on this data:
     1.  Identify 2-3 positive patterns (e.g., "high interview rate with startups").
@@ -428,7 +424,7 @@ aiRouter.post('/performance-insights', async (req: express.Request, res: express
             contents: prompt,
             config: { responseMimeType: "application/json", responseSchema: schema }
         });
-        const parsed = safeJsonParse(response.text);
+        const parsed = safeJsonParse(response.text ?? '{}');
         if (parsed.proposal) {
             parsed.proposal.id = crypto.randomUUID();
         }
@@ -440,20 +436,20 @@ aiRouter.post('/performance-insights', async (req: express.Request, res: express
 
 
 // Chat Endpoints
-aiRouter.post('/chat/send-message', async (req: express.Request, res: express.Response) => {
+aiRouter.post('/chat/send-message', async (req: Request, res: Response) => {
     const { message, systemInstruction } = req.body;
     if (!message || !systemInstruction) return res.status(400).json({ message: 'Message and systemInstruction are required.' });
     
     try {
         const chat = ai!.chats.create({ model: 'gemini-2.5-flash', config: { systemInstruction } });
         const result = await chat.sendMessage({ message });
-        res.status(200).json({ text: result.text });
+        res.status(200).json({ text: result.text ?? '' });
     } catch(error: any) {
         handleApiError(error, res, 'chat/send-message');
     }
 });
 
-aiRouter.post('/chat/parse-command', async (req: express.Request, res: express.Response) => {
+aiRouter.post('/chat/parse-command', async (req: Request, res: Response) => {
     const { userText } = req.body;
     const commandSchema = {
         type: Type.OBJECT,
@@ -479,7 +475,7 @@ aiRouter.post('/chat/parse-command', async (req: express.Request, res: express.R
             model: 'gemini-2.5-flash', contents: prompt,
             config: { responseMimeType: "application/json", responseSchema: commandSchema }
         });
-        res.status(200).json(safeJsonParse(response.text.trim()));
+        res.status(200).json(safeJsonParse(response.text ?? '{"command":"none"}'));
     } catch (error: any) {
         // Safely fallback to non-command
         res.status(200).json({ command: 'none' });
@@ -489,15 +485,15 @@ aiRouter.post('/chat/parse-command', async (req: express.Request, res: express.R
 app.use('/api/ai', checkAiConnection, aiRouter);
 
 const automationRouter = express.Router();
-automationRouter.post('/easy-apply', (req: express.Request, res: express.Response) => res.status(200).json({ success: false, log: ['[BE-INFO] "Easy Apply" is not a real feature. This is a mock response.'] }));
-automationRouter.post('/complex-apply', (req: express.Request, res: express.Response) => res.status(200).json({ success: false, log: ['[BE-INFO] "Complex Apply" is not a real feature. This is a mock response.'] }));
+automationRouter.post('/easy-apply', (req: Request, res: Response) => res.status(200).json({ success: false, log: ['[BE-INFO] "Easy Apply" is not a real feature. This is a mock response.'] }));
+automationRouter.post('/complex-apply', (req: Request, res: Response) => res.status(200).json({ success: false, log: ['[BE-INFO] "Complex Apply" is not a real feature. This is a mock response.'] }));
 app.use('/api/automation', automationRouter);
 
 const gdriveRouter = express.Router();
-gdriveRouter.post('/save-file', (req: express.Request, res: express.Response) => res.status(200).json({ url: `https://docs.google.com/document/d/mock-gdrive-id/edit` }));
-gdriveRouter.post('/create-sheet', (req: express.Request, res: express.Response) => res.status(200).json({ id: `sheet_mock_id`, url: `https://docs.google.com/spreadsheets/d/sheet_mock_id/edit` }));
-gdriveRouter.post('/sync-to-sheet', (req: express.Request, res: express.Response) => res.status(200).json({ success: true }));
-gdriveRouter.post('/sync-from-sheet', (req: express.Request, res: express.Response) => res.status(200).json({ applications: [] }));
+gdriveRouter.post('/save-file', (req: Request, res: Response) => res.status(200).json({ url: `https://docs.google.com/document/d/mock-gdrive-id/edit` }));
+gdriveRouter.post('/create-sheet', (req: Request, res: Response) => res.status(200).json({ id: `sheet_mock_id`, url: `https://docs.google.com/spreadsheets/d/sheet_mock_id/edit` }));
+gdriveRouter.post('/sync-to-sheet', (req: Request, res: Response) => res.status(200).json({ success: true }));
+gdriveRouter.post('/sync-from-sheet', (req: Request, res: Response) => res.status(200).json({ applications: [] }));
 app.use('/api/gdrive', gdriveRouter);
 
 
