@@ -1,6 +1,7 @@
 
 
-import express from 'express';
+
+import express, { Request, Response, NextFunction } from 'express';
 import dotenv from 'dotenv';
 import cors from 'cors';
 import { supabase } from './supabaseClient';
@@ -59,26 +60,26 @@ app.use(express.json({ limit: '10mb' }));
 // --- API ROUTES ---
 
 // Health Check
-app.get('/api', (req: express.Request, res: express.Response) => {
+app.get('/api', (req: Request, res: Response) => {
   res.status(200).send('AI Job Copilot Backend is running!');
 });
 
 // Middleware to check for DB and AI connections
-const checkDbConnection = (req: express.Request, res: express.Response, next: express.NextFunction) => {
+const checkDbConnection = (req: Request, res: Response, next: NextFunction) => {
   if (!supabase) {
     return res.status(503).json({ message: 'Database service is not configured on the server.' });
   }
   next();
 };
 
-const checkAiConnection = (req: express.Request, res: express.Response, next: express.NextFunction) => {
+const checkAiConnection = (req: Request, res: Response, next: NextFunction) => {
     if(!ai) {
         return res.status(503).json({ message: 'AI service is not configured on the server.' });
     }
     next();
 }
 
-const handleApiError = (error: any, res: express.Response, endpoint: string) => {
+const handleApiError = (error: any, res: Response, endpoint: string) => {
     console.error(`Error in ${endpoint}:`, error);
     res.status(500).json({ message: `Failed in ${endpoint}: ${error.message}`});
 }
@@ -102,7 +103,7 @@ const DUMMY_USER_ID = 1;
 const DUMMY_USER_UUID = '00000000-0000-0000-0000-000000000000';
 
 // Profile
-dataRouter.get('/profile', async (req: express.Request, res: express.Response) => {
+dataRouter.get('/profile', async (req: Request, res: Response) => {
     try {
         const { data, error } = await supabase!.from('profiles').select('*').eq('id', DUMMY_USER_ID).single();
         if (error && error.code !== 'PGRST116') { // Ignore 'single row not found' error
@@ -114,37 +115,36 @@ dataRouter.get('/profile', async (req: express.Request, res: express.Response) =
     }
 });
 
-dataRouter.post('/profile', async (req: express.Request, res: express.Response) => {
+dataRouter.post('/profile', async (req: Request, res: Response) => {
     try {
         const fullProfile: { [key: string]: any } = req.body;
         
-        // A minimal, safe list of columns to save. This prevents crashes if the DB schema is incomplete.
-        // It intentionally excludes fields that have caused errors ('jobRoles', 'baseCV', 'autonomousMode', etc.)
-        const coreDbColumns = [
+        // **CRITICAL FIX**: This is a "whitelist" of columns that are known to exist in the user's database.
+        // The backend will ONLY try to save columns from this list.
+        // This prevents crashes if the frontend sends data for a column that doesn't exist in the database schema.
+        const KNOWN_SAFE_COLUMNS = [
             'name', 'summary', 'linkedinUrl', 'email', 'agentEmail', 'agentPassword',
             'gdriveLinked', 'gSheetId', 'gSheetUrl', 'artifacts', 'minimumFitScore',
-            // The following fields are now included again, but the logic will not crash if they don't exist.
-            'jobRoles', 'locations', 'keySkills', 'yearsOfExperience', 'education', 
-            'languages', 'certifications', 'autonomousMode'
+            'locations', 'keySkills', 'yearsOfExperience', 'education', 
+            'languages', 'certifications', 'baseCV', 'baseCVfilename', 'autonomousMode'
         ];
 
         const profileToSave: { [key:string]: any } = {};
         
-        coreDbColumns.forEach(key => {
+        KNOWN_SAFE_COLUMNS.forEach(key => {
+            // Check if the incoming profile from the frontend *actually has* this key before adding it.
             if (Object.prototype.hasOwnProperty.call(fullProfile, key)) {
                 profileToSave[key] = fullProfile[key];
             }
         });
 
+        // The user ID is always required for the upsert operation to identify the correct row.
         profileToSave.id = DUMMY_USER_ID;
 
         const { data, error } = await supabase!.from('profiles').upsert(profileToSave).select().single();
         
         if (error) {
-            // Log the detailed error but don't crash. The frontend will handle it.
-            console.error("Error in saveProfile:", error);
-            // We can choose to return an error or a success with a warning.
-            // Returning an error is more explicit.
+            console.error("Error during 'upsert' in saveProfile. This is likely due to a schema mismatch even with filtering. Error details:", error);
             return handleApiError(error, res, 'saveProfile');
         }
         
@@ -156,7 +156,7 @@ dataRouter.post('/profile', async (req: express.Request, res: express.Response) 
 
 
 // Generic function for handling data sync with "Smart Save" filtering
-const syncTable = async (req: express.Request, res: express.Response, tableName: string, coreColumns: string[]) => {
+const syncTable = async (req: Request, res: Response, tableName: string, coreColumns: string[]) => {
     try {
         const items = req.body;
         
@@ -203,7 +203,7 @@ const coreExperimentColumns = [
 ];
 
 // Applications
-dataRouter.get('/applications', async (req: express.Request, res: express.Response) => {
+dataRouter.get('/applications', async (req: Request, res: Response) => {
     try {
         const { data, error } = await supabase!.from('applications').select('*').eq('user_id', DUMMY_USER_UUID);
         if (error) return handleApiError(error, res, 'getApplications');
@@ -212,10 +212,10 @@ dataRouter.get('/applications', async (req: express.Request, res: express.Respon
         handleApiError(e, res, 'getApplications');
     }
 });
-dataRouter.post('/applications', (req: express.Request, res: express.Response) => syncTable(req, res, 'applications', coreApplicationColumns));
+dataRouter.post('/applications', (req: Request, res: Response) => syncTable(req, res, 'applications', coreApplicationColumns));
 
 // Experiments
-dataRouter.get('/experiments', async (req: express.Request, res: express.Response) => {
+dataRouter.get('/experiments', async (req: Request, res: Response) => {
     try {
         const { data, error } = await supabase!.from('experiments').select('*').eq('user_id', DUMMY_USER_UUID);
         if (error) return handleApiError(error, res, 'getExperiments');
@@ -224,7 +224,7 @@ dataRouter.get('/experiments', async (req: express.Request, res: express.Respons
         handleApiError(e, res, 'getExperiments');
     }
 });
-dataRouter.post('/experiments', (req: express.Request, res: express.Response) => syncTable(req, res, 'experiments', coreExperimentColumns));
+dataRouter.post('/experiments', (req: Request, res: Response) => syncTable(req, res, 'experiments', coreExperimentColumns));
 
 app.use('/api/data', checkDbConnection, dataRouter);
 
@@ -259,7 +259,7 @@ const jobsResponseSchema = {
     required: ['jobs']
 }
 
-aiRouter.post('/generate-jobs', async (req: express.Request, res: express.Response) => {
+aiRouter.post('/generate-jobs', async (req: Request, res: Response) => {
     const { profile } = req.body;
     const prompt = `Act as a senior IT recruiter in Germany. Based on the following candidate profile, find 5-7 highly relevant, recent job openings. The candidate must meet at least 80% of the requirements. Provide a fit score and a one-sentence reasoning for each.
     
@@ -283,7 +283,7 @@ aiRouter.post('/generate-jobs', async (req: express.Request, res: express.Respon
     }
 });
 
-aiRouter.post('/generate-cv', async (req: express.Request, res: express.Response) => {
+aiRouter.post('/generate-cv', async (req: Request, res: Response) => {
     const { profile, job, activeExperiments } = req.body;
     let experimentInstructions = 'No active experiments.';
     if(activeExperiments && activeExperiments.length > 0) {
@@ -321,7 +321,7 @@ Return ONLY the full text of the tailored CV, with no extra commentary.`;
 });
 
 
-aiRouter.post('/generate-cover-letter', async (req: express.Request, res: express.Response) => {
+aiRouter.post('/generate-cover-letter', async (req: Request, res: Response) => {
     const { profile, job } = req.body;
     const prompt = `Act as a professional career coach. Write a compelling and concise cover letter for the user, tailored to the specific job. The tone should be professional but enthusiastic.
 
@@ -361,21 +361,40 @@ const extractedProfileSchema = {
     }
 };
 
-aiRouter.post('/extract-profile', async (req: express.Request, res: express.Response) => {
+aiRouter.post('/extract-profile', async (req: Request, res: Response) => {
     const { cvData, linkedinUrl, artifacts } = req.body;
-    const prompt = `You are an expert HR data analyst. Your task is to meticulously analyze the provided career documents and extract key information into a structured JSON object. Do not invent or infer information that is not present in the source documents. If a field is not found, leave it as an empty string or null.
 
-Source Documents:
-- CV Text: ${JSON.stringify(cvData) ?? 'Not provided.'}
-- LinkedIn Profile URL: ${linkedinUrl ?? 'Not provided.'}
-- Other Career Artifacts: ${JSON.stringify(artifacts) ?? 'Not provided.'}
+    const instructionPart = { text: `You are an expert HR data analyst. Your task is to meticulously analyze the provided career documents and extract key information into a structured JSON object. 
+    
+    IMPORTANT: Do not invent or infer information that is not present in the source documents. If a field is not found, leave it as an empty string. The 'jobRoles' field should be based on titles from the CV, not generic roles. The 'locations' field should only contain cities/countries explicitly mentioned. Stick only to what's in the documents.
+    
+    The final 'extractedText' field should contain the full, cleaned text extracted from the CV source.
+    
+    Analyze the following documents. Return ONLY the structured JSON object.` };
 
-Extract the following fields. Be precise and stick to the source material.
-Return ONLY the structured JSON object.`;
+    const requestParts: any[] = [instructionPart];
 
-     try {
+    // Add the CV data, whether it's pasted text or an uploaded file
+    if (cvData?.text) {
+        requestParts.push({ text: `\n\n--- CV (Pasted Text) ---\n${cvData.text}` });
+    } else if (cvData?.file) {
+        // This is the correct way to send a file for analysis
+        requestParts.push({ inlineData: { mimeType: cvData.file.mimeType, data: cvData.file.data } });
+    }
+
+    // Add optional LinkedIn URL and artifacts
+    if (linkedinUrl) {
+        requestParts.push({ text: `\n\n--- LinkedIn Profile URL ---\n${linkedinUrl}` });
+    }
+    if (artifacts && Array.isArray(artifacts) && artifacts.length > 0) {
+        const artifactsText = artifacts.map((a: any) => `Label: ${a.label}\nContent: ${a.content}`).join('\n---\n');
+        requestParts.push({ text: `\n\n--- Additional Career Artifacts ---\n${artifactsText}` });
+    }
+
+    try {
         const response = await ai!.models.generateContent({
-            model: 'gemini-2.5-flash', contents: prompt,
+            model: 'gemini-2.5-flash',
+            contents: { parts: requestParts },
             config: { responseMimeType: "application/json", responseSchema: extractedProfileSchema }
         });
         res.status(200).json(safeJsonParse(response.text ?? '{}'));
@@ -384,7 +403,7 @@ Return ONLY the structured JSON object.`;
     }
 });
 
-aiRouter.post('/clarifying-questions', async (req: express.Request, res: express.Response) => {
+aiRouter.post('/clarifying-questions', async (req: Request, res: Response) => {
     const { extractedProfile } = req.body;
     const prompt = `Based on this extracted user profile, identify any vague or missing information. Formulate 2-3 friendly, concise questions to ask the user to clarify these points.
     
@@ -399,7 +418,7 @@ aiRouter.post('/clarifying-questions', async (req: express.Request, res: express
     }
 });
 
-aiRouter.post('/suggest-roles', async (req: express.Request, res: express.Response) => {
+aiRouter.post('/suggest-roles', async (req: Request, res: Response) => {
     const { profile } = req.body;
     const prompt = `Based on the user's profile, suggest 3-5 alternative or related job roles they might be qualified for and interested in.
     
@@ -418,7 +437,7 @@ aiRouter.post('/suggest-roles', async (req: express.Request, res: express.Respon
     }
 });
 
-aiRouter.post('/interview-prep', async (req: express.Request, res: express.Response) => {
+aiRouter.post('/interview-prep', async (req: Request, res: Response) => {
     const { profile, application } = req.body;
     const prompt = `Generate a comprehensive but concise interview preparation kit in Markdown format for the following user and application.
     
@@ -446,7 +465,7 @@ aiRouter.post('/interview-prep', async (req: express.Request, res: express.Respo
     }
 });
 
-aiRouter.post('/analyze-audio', async (req: express.Request, res: express.Response) => {
+aiRouter.post('/analyze-audio', async (req: Request, res: Response) => {
     const { profile, application, question, audioBase64, audioMimeType } = req.body;
     
     const audioPart = { inlineData: { mimeType: audioMimeType, data: audioBase64 } };
@@ -469,7 +488,7 @@ aiRouter.post('/analyze-audio', async (req: express.Request, res: express.Respon
 });
 
 
-aiRouter.post('/performance-insights', async (req: express.Request, res: express.Response) => {
+aiRouter.post('/performance-insights', async (req: Request, res: Response) => {
     const { profile, applications } = req.body;
     const prompt = `Act as an expert career strategist. Analyze the user's application history to identify patterns and suggest improvements.
     
@@ -524,7 +543,7 @@ aiRouter.post('/performance-insights', async (req: express.Request, res: express
 
 
 // Chat Endpoints
-aiRouter.post('/chat/send-message', async (req: express.Request, res: express.Response) => {
+aiRouter.post('/chat/send-message', async (req: Request, res: Response) => {
     const { message, systemInstruction } = req.body;
     if (!message || !systemInstruction) return res.status(400).json({ message: 'Message and systemInstruction are required.' });
     
@@ -537,7 +556,7 @@ aiRouter.post('/chat/send-message', async (req: express.Request, res: express.Re
     }
 });
 
-aiRouter.post('/chat/parse-command', async (req: express.Request, res: express.Response) => {
+aiRouter.post('/chat/parse-command', async (req: Request, res: Response) => {
     const { userText } = req.body;
     const commandSchema = {
         type: Type.OBJECT,
@@ -573,15 +592,15 @@ aiRouter.post('/chat/parse-command', async (req: express.Request, res: express.R
 app.use('/api/ai', checkAiConnection, aiRouter);
 
 const automationRouter = express.Router();
-automationRouter.post('/easy-apply', (req: express.Request, res: express.Response) => res.status(200).json({ success: false, log: ['[BE-INFO] "Easy Apply" is not a real feature. This is a mock response.'] }));
-automationRouter.post('/complex-apply', (req: express.Request, res: express.Response) => res.status(200).json({ success: false, log: ['[BE-INFO] "Complex Apply" is not a real feature. This is a mock response.'] }));
+automationRouter.post('/easy-apply', (req: Request, res: Response) => res.status(200).json({ success: false, log: ['[BE-INFO] "Easy Apply" is not a real feature. This is a mock response.'] }));
+automationRouter.post('/complex-apply', (req: Request, res: Response) => res.status(200).json({ success: false, log: ['[BE-INFO] "Complex Apply" is not a real feature. This is a mock response.'] }));
 app.use('/api/automation', automationRouter);
 
 const gdriveRouter = express.Router();
-gdriveRouter.post('/save-file', (req: express.Request, res: express.Response) => res.status(200).json({ url: `https://docs.google.com/document/d/mock-gdrive-id/edit` }));
-gdriveRouter.post('/create-sheet', (req: express.Request, res: express.Response) => res.status(200).json({ id: `sheet_mock_id`, url: `https://docs.google.com/spreadsheets/d/sheet_mock_id/edit` }));
-gdriveRouter.post('/sync-to-sheet', (req: express.Request, res: express.Response) => res.status(200).json({ success: true }));
-gdriveRouter.post('/sync-from-sheet', (req: express.Request, res: express.Response) => res.status(200).json({ applications: [] }));
+gdriveRouter.post('/save-file', (req: Request, res: Response) => res.status(200).json({ url: `https://docs.google.com/document/d/mock-gdrive-id/edit` }));
+gdriveRouter.post('/create-sheet', (req: Request, res: Response) => res.status(200).json({ id: `sheet_mock_id`, url: `https://docs.google.com/spreadsheets/d/sheet_mock_id/edit` }));
+gdriveRouter.post('/sync-to-sheet', (req: Request, res: Response) => res.status(200).json({ success: true }));
+gdriveRouter.post('/sync-from-sheet', (req: Request, res: Response) => res.status(200).json({ applications: [] }));
 app.use('/api/gdrive', gdriveRouter);
 
 
