@@ -12,7 +12,6 @@ export interface UserProfile {
   education?: string;
   languages?: string;
   certifications?: string;
-  autonomousMode: boolean;
   linkedinUrl?: string;
   gdriveLinked: boolean;
   gSheetId?: string;
