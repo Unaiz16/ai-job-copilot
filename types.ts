@@ -21,6 +21,7 @@ export interface UserProfile {
   agentPassword?: string;
   artifacts?: CareerArtifact[];
   minimumFitScore?: number;
+  autonomousMode: boolean;
 }
 
 export interface CareerArtifact {
