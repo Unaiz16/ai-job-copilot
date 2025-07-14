@@ -1,6 +1,7 @@
 
 import express, { Request as ExpressRequest, Response as ExpressResponse, NextFunction } from 'express';
 import dotenv from 'dotenv';
+dotenv.config();
 import cors from 'cors';
 import { supabase } from './supabaseClient';
 import { GoogleGenAI, Type } from '@google/genai';
