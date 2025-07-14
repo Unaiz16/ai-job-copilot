@@ -5,7 +5,6 @@ import cors from 'cors';
 import { supabase } from './supabaseClient';
 import { GoogleGenAI, Type } from '@google/genai';
 
-dotenv.config();
 
 const app: express.Express = express();
 const port = process.env.PORT || 3001;
