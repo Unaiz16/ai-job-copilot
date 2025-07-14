@@ -57,7 +57,7 @@ app.use(express.json({ limit: '10mb' }));
 // --- API ROUTES ---
 
 // Health Check
-app.get('/api', (req: ExpressRequest, res: ExpressResponse) => {
+app.get("/api/health", (req: ExpressRequest, res: ExpressResponse) => {
   res.status(200).send('AI Job Copilot Backend is running!');
 });
 
