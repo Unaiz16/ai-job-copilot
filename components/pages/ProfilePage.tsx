@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import type { UserProfile, CareerArtifact, ExtractedProfile } from '../../types';
-import { extractProfileFromCV, generateSuggestedJobRoles, generateClarifyingQuestions } from '../../services/geminiService';
+import { extractProfileFromCV, generateSuggestedJobRoles, generateClarifyingQuestions } from '../../src/services/geminiService';
 import { Icon } from '../common/Icon';
 import Spinner from '../common/Spinner';
 
