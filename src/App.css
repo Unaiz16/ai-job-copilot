@@ -1,0 +1,142 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+
+@custom-variant dark (&:is(.dark *));
+
+@theme inline {
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+}
+
+:root {
+  --radius: 0.75rem;
+  
+  /* Professional Dark Theme */
+  --background: oklch(0.08 0.01 240);
+  --foreground: oklch(0.98 0.01 240);
+  --card: oklch(0.12 0.01 240);
+  --card-foreground: oklch(0.98 0.01 240);
+  --popover: oklch(0.12 0.01 240);
+  --popover-foreground: oklch(0.98 0.01 240);
+  
+  /* AI-themed primary colors */
+  --primary: oklch(0.65 0.25 260);
+  --primary-foreground: oklch(0.98 0.01 240);
+  --secondary: oklch(0.18 0.02 240);
+  --secondary-foreground: oklch(0.98 0.01 240);
+  
+  --muted: oklch(0.15 0.01 240);
+  --muted-foreground: oklch(0.65 0.01 240);
+  --accent: oklch(0.22 0.02 240);
+  --accent-foreground: oklch(0.98 0.01 240);
+  
+  --destructive: oklch(0.65 0.25 15);
+  --border: oklch(0.25 0.02 240);
+  --input: oklch(0.18 0.02 240);
+  --ring: oklch(0.65 0.25 260);
+  
+  /* Chart colors for analytics */
+  --chart-1: oklch(0.65 0.25 260);
+  --chart-2: oklch(0.65 0.25 180);
+  --chart-3: oklch(0.65 0.25 120);
+  --chart-4: oklch(0.65 0.25 60);
+  --chart-5: oklch(0.65 0.25 300);
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  
+  body {
+    @apply bg-background text-foreground font-sans antialiased;
+    background-image: 
+      radial-gradient(circle at 25% 25%, oklch(0.15 0.05 260) 0%, transparent 50%),
+      radial-gradient(circle at 75% 75%, oklch(0.12 0.03 240) 0%, transparent 50%);
+  }
+}
+
+@layer components {
+  /* Glass morphism effect */
+  .glass {
+    @apply bg-card/80 backdrop-blur-xl border border-border/50;
+  }
+  
+  /* Gradient text */
+  .gradient-text {
+    @apply bg-gradient-to-r from-primary to-chart-2 bg-clip-text text-transparent;
+  }
+  
+  /* Professional card hover effect */
+  .card-hover {
+    @apply transition-all duration-300 hover:shadow-lg hover:shadow-primary/10 hover:border-primary/30;
+  }
+  
+  /* AI agent indicators */
+  .ai-pulse {
+    animation: aiPulse 2s ease-in-out infinite;
+  }
+  
+  /* Professional button variants */
+  .btn-ai {
+    @apply bg-gradient-to-r from-primary to-chart-2 hover:from-primary/90 hover:to-chart-2/90 text-primary-foreground font-medium;
+  }
+
+  .btn-autonomous {
+    @apply bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 text-white font-medium;
+  }
+}
+
+@keyframes aiPulse {
+  0%, 100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.7;
+    transform: scale(1.05);
+  }
+}
+
+/* Professional typography */
+.heading-xl {
+  @apply text-4xl font-bold tracking-tight;
+}
+
+.heading-lg {
+  @apply text-3xl font-semibold tracking-tight;
+}
+
+.heading-md {
+  @apply text-2xl font-semibold tracking-tight;
+}
+
+.heading-sm {
+  @apply text-xl font-semibold tracking-tight;
+}
+
