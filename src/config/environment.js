@@ -9,9 +9,7 @@ const config = {
   
   // API Configuration
   api: {
-    baseUrl: isProduction 
-      ? 'https://ai-job-copilot.onrender.com'
-      : 'http://localhost:5000',
+    baseUrl: 'https://ai-job-copilot.onrender.com',
     
     endpoints: {
       // Data endpoints
