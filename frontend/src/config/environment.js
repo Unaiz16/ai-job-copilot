@@ -9,19 +9,20 @@ const config = {
   
   // API Configuration
   api: {
-    base: isProduction 
-      ? 'https://3dhkilcjmqwx.manus.space'
-      : 'https://3dhkilcjmqwx.manus.space',
+    baseUrl: isProduction 
+      ? 'https://ai-job-copilot.onrender.com'
+      : 'https://ai-job-copilot.onrender.com',
     
     endpoints: {
       // Data endpoints
-      profile: '/api/profile',
+      profile: '/api/data/profile',
       applications: '/api/applications',
       experiments: '/api/experiments',
       
       // AI endpoints
-      extractProfile: '/api/ai/analyze-cv',
-      generateJobs: '/api/jobs/search',
+      extractProfile: '/api/ai/extract-profile',
+      suggestRoles: '/api/ai/suggest-roles',
+      generateJobs: '/api/ai/generate-jobs',
       generateCV: '/api/ai/generate-cv',
       generateCoverLetter: '/api/ai/cover-letter',
       generateInterviewPrep: '/api/ai/interview-prep',

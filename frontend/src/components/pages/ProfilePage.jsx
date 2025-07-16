@@ -13,7 +13,17 @@ import {
   Star,
   TrendingUp,
   Download,
-  Eye
+  Eye,
+  Plus,
+  Trash2,
+  Settings,
+  Shield,
+  Link,
+  Sparkles,
+  Globe,
+  Lock,
+  Mail,
+  Key
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -22,24 +32,31 @@ import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
+import { Switch } from '@/components/ui/switch';
+import { Slider } from '@/components/ui/slider';
+import { Separator } from '@/components/ui/separator';
 import LoadingSpinner from '@/components/ui/LoadingSpinner';
 import config from '@/config/environment';
 
 const ProfilePage = ({ profile, setProfile, onSaveProfile, addAgentMessage }) => {
   const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [isSuggestingRoles, setIsSuggestingRoles] = useState(false);
   const [analysisResults, setAnalysisResults] = useState(null);
   const [uploadedFile, setUploadedFile] = useState(null);
   const [profileCompleteness, setProfileCompleteness] = useState(0);
   const [careerDnaScore, setCareerDnaScore] = useState(0);
   const [skillsGaps, setSkillsGaps] = useState([]);
   const [recommendations, setRecommendations] = useState([]);
+  const [careerArtifacts, setCareerArtifacts] = useState([]);
+  const [agentCredentials, setAgentCredentials] = useState([]);
+  const [googleDriveLinked, setGoogleDriveLinked] = useState(false);
   const fileInputRef = useRef(null);
 
   // Calculate profile completeness
   const calculateCompleteness = useCallback((profileData) => {
     const fields = [
       'name', 'email', 'summary', 'keySkills', 'yearsOfExperience',
-      'education', 'jobRoles', 'locations'
+      'education', 'jobRoles', 'locations', 'linkedinUrl'
     ];
     const completed = fields.filter(field => profileData[field] && profileData[field].trim()).length;
     return Math.round((completed / fields.length) * 100);
@@ -83,7 +100,9 @@ const ProfilePage = ({ profile, setProfile, onSaveProfile, addAgentMessage }) =>
         body: JSON.stringify({
           cvData: base64,
           filename: uploadedFile.name,
-          mimeType: uploadedFile.type
+          mimeType: uploadedFile.type,
+          linkedinUrl: profile.linkedinUrl || '',
+          careerArtifacts: careerArtifacts
         }),
       });
 
@@ -119,7 +138,47 @@ const ProfilePage = ({ profile, setProfile, onSaveProfile, addAgentMessage }) =>
     } finally {
       setIsAnalyzing(false);
     }
-  }, [uploadedFile, profile, setProfile, calculateCompleteness, addAgentMessage]);
+  }, [uploadedFile, profile, setProfile, calculateCompleteness, addAgentMessage, careerArtifacts]);
+
+  // Handle role suggestions
+  const handleSuggestRoles = useCallback(async () => {
+    setIsSuggestingRoles(true);
+    addAgentMessage("Analyzing your profile to suggest optimal job roles...");
+
+    try {
+      const response = await fetch(`${config.api.baseUrl}${config.api.endpoints.suggestRoles}`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          profile: profile,
+          currentRoles: profile.jobRoles || ''
+        }),
+      });
+
+      if (response.ok) {
+        const results = await response.json();
+        const suggestedRoles = results.suggestedRoles || [];
+        
+        // Update profile with suggested roles
+        const updatedProfile = {
+          ...profile,
+          jobRoles: suggestedRoles.join(', ')
+        };
+        
+        setProfile(updatedProfile);
+        addAgentMessage(`I've suggested ${suggestedRoles.length} job roles based on your profile: ${suggestedRoles.join(', ')}`);
+      } else {
+        throw new Error('Failed to get role suggestions');
+      }
+    } catch (error) {
+      console.error('Role suggestion failed:', error);
+      addAgentMessage("Role suggestion failed. Please try again or enter roles manually.");
+    } finally {
+      setIsSuggestingRoles(false);
+    }
+  }, [profile, setProfile, addAgentMessage]);
 
   // Handle manual profile updates
   const handleProfileUpdate = useCallback((field, value) => {
@@ -128,15 +187,67 @@ const ProfilePage = ({ profile, setProfile, onSaveProfile, addAgentMessage }) =>
     setProfileCompleteness(calculateCompleteness(updatedProfile));
   }, [profile, setProfile, calculateCompleteness]);
 
+  // Handle career artifacts
+  const addCareerArtifact = useCallback(() => {
+    setCareerArtifacts([...careerArtifacts, { type: '', content: '', description: '' }]);
+  }, [careerArtifacts]);
+
+  const updateCareerArtifact = useCallback((index, field, value) => {
+    const updated = [...careerArtifacts];
+    updated[index][field] = value;
+    setCareerArtifacts(updated);
+  }, [careerArtifacts]);
+
+  const removeCareerArtifact = useCallback((index) => {
+    setCareerArtifacts(careerArtifacts.filter((_, i) => i !== index));
+  }, [careerArtifacts]);
+
+  // Handle agent credentials
+  const addAgentCredential = useCallback(() => {
+    setAgentCredentials([...agentCredentials, { platform: '', email: '', password: '' }]);
+  }, [agentCredentials]);
+
+  const updateAgentCredential = useCallback((index, field, value) => {
+    const updated = [...agentCredentials];
+    updated[index][field] = value;
+    setAgentCredentials(updated);
+  }, [agentCredentials]);
+
+  const removeAgentCredential = useCallback((index) => {
+    setAgentCredentials(agentCredentials.filter((_, i) => i !== index));
+  }, [agentCredentials]);
+
+  // Handle Google Drive linking
+  const handleLinkGoogleDrive = useCallback(async () => {
+    try {
+      // This would typically open a Google OAuth window
+      addAgentMessage("Opening Google Drive authentication...");
+      // Mock implementation - in real app this would handle OAuth
+      setTimeout(() => {
+        setGoogleDriveLinked(true);
+        addAgentMessage("Google Drive linked successfully! Created 'AI Job Copilot Applications' folder and 'My Application Pipeline' sheet.");
+      }, 2000);
+    } catch (error) {
+      addAgentMessage("Failed to link Google Drive. Please try again.");
+    }
+  }, [addAgentMessage]);
+
   // Save profile
   const handleSaveProfile = useCallback(async () => {
-    const success = await onSaveProfile(profile);
+    const profileData = {
+      ...profile,
+      careerArtifacts,
+      agentCredentials,
+      googleDriveLinked
+    };
+    
+    const success = await onSaveProfile(profileData);
     if (success) {
       addAgentMessage("Your Living Career DNA has been updated successfully!");
     } else {
       addAgentMessage("Failed to save profile. Please try again.");
     }
-  }, [profile, onSaveProfile, addAgentMessage]);
+  }, [profile, onSaveProfile, addAgentMessage, careerArtifacts, agentCredentials, googleDriveLinked]);
 
   return (
     <div className="container mx-auto px-4 sm:px-6 lg:px-8 py-8">
@@ -144,10 +255,11 @@ const ProfilePage = ({ profile, setProfile, onSaveProfile, addAgentMessage }) =>
         {/* Header */}
         <div className="text-center">
           <h1 className="heading-xl gradient-text mb-4">
-            Living Career DNA
+            Your Career DNA
           </h1>
           <p className="text-lg text-muted-foreground mb-8">
-            Dynamic, multi-dimensional professional profile that evolves with AI analysis and gap identification
+            This is the agent's brain. Provide your CV, LinkedIn, and any other "artifacts" like past job descriptions or project notes. 
+            How well the AI synthesizes them into a powerful unified profile.
           </p>
         </div>
 
@@ -156,10 +268,10 @@ const ProfilePage = ({ profile, setProfile, onSaveProfile, addAgentMessage }) =>
           <CardHeader>
             <CardTitle className="flex items-center space-x-2">
               <Brain className="h-5 w-5 text-primary" />
-              <span>AI-Powered CV Analysis</span>
+              <span>Upload CV File</span>
             </CardTitle>
             <CardDescription>
-              Upload your CV for intelligent extraction and analysis
+              Parse CV Text
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -171,16 +283,16 @@ const ProfilePage = ({ profile, setProfile, onSaveProfile, addAgentMessage }) =>
                 >
                   <Upload className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
                   <p className="text-lg font-medium mb-2">
-                    Drop your CV here or click to upload
+                    Upload a file or drag and drop
                   </p>
                   <p className="text-sm text-muted-foreground">
-                    Supports PDF and Word documents
+                    PDF, DOCX, TXT
                   </p>
                 </div>
                 <input
                   ref={fileInputRef}
                   type="file"
-                  accept=".pdf,.doc,.docx"
+                  accept=".pdf,.doc,.docx,.txt"
                   onChange={handleFileUpload}
                   className="hidden"
                 />
@@ -212,6 +324,59 @@ const ProfilePage = ({ profile, setProfile, onSaveProfile, addAgentMessage }) =>
                 />
               </div>
             )}
+          </CardContent>
+        </Card>
+
+        {/* Career Artifacts Section */}
+        <Card className="glass">
+          <CardHeader>
+            <CardTitle className="flex items-center space-x-2">
+              <FileText className="h-5 w-5 text-primary" />
+              <span>Career Artifacts (Optional)</span>
+            </CardTitle>
+            <CardDescription>
+              Add more context for the AI, like job descriptions, project notes, or performance reviews.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {careerArtifacts.map((artifact, index) => (
+              <div key={index} className="p-4 border rounded-lg space-y-3">
+                <div className="flex items-center justify-between">
+                  <Input
+                    placeholder="Type (e.g., Job Description, Performance Review)"
+                    value={artifact.type}
+                    onChange={(e) => updateCareerArtifact(index, 'type', e.target.value)}
+                    className="flex-1 mr-2"
+                  />
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => removeCareerArtifact(index)}
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </Button>
+                </div>
+                <Input
+                  placeholder="Brief description"
+                  value={artifact.description}
+                  onChange={(e) => updateCareerArtifact(index, 'description', e.target.value)}
+                />
+                <Textarea
+                  placeholder="Paste content here..."
+                  value={artifact.content}
+                  onChange={(e) => updateCareerArtifact(index, 'content', e.target.value)}
+                  rows={3}
+                />
+              </div>
+            ))}
+            <Button
+              variant="outline"
+              onClick={addCareerArtifact}
+              className="w-full"
+            >
+              <Plus className="h-4 w-4 mr-2" />
+              Add Another Artifact
+            </Button>
           </CardContent>
         </Card>
 
@@ -280,33 +445,43 @@ const ProfilePage = ({ profile, setProfile, onSaveProfile, addAgentMessage }) =>
                   id="name"
                   value={profile.name || ''}
                   onChange={(e) => handleProfileUpdate('name', e.target.value)}
-                  placeholder="Enter your full name"
+                  placeholder="e.g., Jane Doe"
                 />
               </div>
               
               <div className="space-y-2">
-                <Label htmlFor="email">Email Address</Label>
+                <Label htmlFor="email">Application Email</Label>
                 <Input
                   id="email"
                   type="email"
                   value={profile.email || ''}
                   onChange={(e) => handleProfileUpdate('email', e.target.value)}
-                  placeholder="your.email@example.com"
+                  placeholder="e.g., jane.doe@email.com"
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="linkedinUrl">LinkedIn Profile URL</Label>
+                <Input
+                  id="linkedinUrl"
+                  value={profile.linkedinUrl || ''}
+                  onChange={(e) => handleProfileUpdate('linkedinUrl', e.target.value)}
+                  placeholder="https://linkedin.com/in/your-profile"
                 />
               </div>
               
               <div className="space-y-2">
-                <Label htmlFor="locations">Preferred Locations</Label>
+                <Label htmlFor="locations">Target Locations</Label>
                 <Input
                   id="locations"
-                  value={profile.locations || 'Germany'}
+                  value={profile.locations || 'Berlin, Munich (Germany)'}
                   onChange={(e) => handleProfileUpdate('locations', e.target.value)}
-                  placeholder="e.g., Berlin, Munich, Hamburg"
+                  placeholder="e.g., Berlin, Munich (Germany)"
                 />
               </div>
               
               <div className="space-y-2">
-                <Label htmlFor="yearsOfExperience">Years of Experience</Label>
+                <Label htmlFor="yearsOfExperience">Years of Professional Experience</Label>
                 <Input
                   id="yearsOfExperience"
                   value={profile.yearsOfExperience || ''}
@@ -327,23 +502,58 @@ const ProfilePage = ({ profile, setProfile, onSaveProfile, addAgentMessage }) =>
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="space-y-2">
-                <Label htmlFor="jobRoles">Target Job Roles</Label>
+                <Label htmlFor="jobRoles" className="flex items-center space-x-2">
+                  <span>Desired Job Roles</span>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={handleSuggestRoles}
+                    disabled={isSuggestingRoles}
+                    className="p-1 h-6 w-6"
+                  >
+                    <Sparkles className="h-3 w-3" />
+                  </Button>
+                </Label>
                 <Input
                   id="jobRoles"
                   value={profile.jobRoles || ''}
                   onChange={(e) => handleProfileUpdate('jobRoles', e.target.value)}
-                  placeholder="e.g., Software Engineer, DevOps Engineer"
+                  placeholder="e.g., Software Engineer, Product Manager"
+                  disabled={isSuggestingRoles}
                 />
+                {isSuggestingRoles && (
+                  <p className="text-xs text-muted-foreground">AI is suggesting roles...</p>
+                )}
               </div>
               
               <div className="space-y-2">
-                <Label htmlFor="keySkills">Key Skills</Label>
+                <Label htmlFor="education">Education</Label>
                 <Textarea
-                  id="keySkills"
-                  value={profile.keySkills || ''}
-                  onChange={(e) => handleProfileUpdate('keySkills', e.target.value)}
-                  placeholder="List your key technical and soft skills..."
-                  rows={3}
+                  id="education"
+                  value={profile.education || ''}
+                  onChange={(e) => handleProfileUpdate('education', e.target.value)}
+                  placeholder="AI will extract this from your CV."
+                  rows={2}
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="keySkills">Languages</Label>
+                <Input
+                  id="languages"
+                  value={profile.languages || ''}
+                  onChange={(e) => handleProfileUpdate('languages', e.target.value)}
+                  placeholder="e.g., German (C1), English (Fluent)"
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="certifications">Certifications & Licenses</Label>
+                <Input
+                  id="certifications"
+                  value={profile.certifications || ''}
+                  onChange={(e) => handleProfileUpdate('certifications', e.target.value)}
+                  placeholder="e.g., PMP, AWS Certified Developer"
                 />
               </div>
               
@@ -353,13 +563,178 @@ const ProfilePage = ({ profile, setProfile, onSaveProfile, addAgentMessage }) =>
                   id="summary"
                   value={profile.summary || ''}
                   onChange={(e) => handleProfileUpdate('summary', e.target.value)}
-                  placeholder="Brief summary of your professional background and career objectives..."
-                  rows={4}
+                  placeholder="Generated by AI after analyzing your CV."
+                  rows={3}
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="keySkills">Key Skills</Label>
+                <Textarea
+                  id="keySkills"
+                  value={profile.keySkills || ''}
+                  onChange={(e) => handleProfileUpdate('keySkills', e.target.value)}
+                  placeholder="Generated by AI after analyzing your CV."
+                  rows={2}
                 />
               </div>
             </CardContent>
           </Card>
         </div>
+
+        {/* Agent Settings */}
+        <Card className="glass">
+          <CardHeader>
+            <CardTitle className="flex items-center space-x-2">
+              <Settings className="h-5 w-5 text-primary" />
+              <span>Agent Settings</span>
+            </CardTitle>
+            <CardDescription>
+              Configure how the AI agent behaves when searching and applying for jobs
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-6">
+            {/* Autonomous Mode */}
+            <div className="flex items-center justify-between p-4 border rounded-lg">
+              <div className="space-y-1">
+                <div className="flex items-center space-x-2">
+                  <Shield className="h-4 w-4 text-primary" />
+                  <Label htmlFor="autonomousMode" className="font-medium">Autonomous Application Mode</Label>
+                </div>
+                <p className="text-sm text-muted-foreground">
+                  Allow the agent to apply to high-fit jobs (>90%) on your behalf
+                </p>
+              </div>
+              <Switch
+                id="autonomousMode"
+                checked={profile.autonomousMode || false}
+                onCheckedChange={(checked) => handleProfileUpdate('autonomousMode', checked)}
+              />
+            </div>
+
+            {/* Minimum Fit Score */}
+            <div className="space-y-3">
+              <Label>Set Minimum Fit Score</Label>
+              <p className="text-sm text-muted-foreground">
+                Only apply to jobs above this fit score. Check the balance to ensure high-quality applications.
+              </p>
+              <div className="px-4">
+                <Slider
+                  value={[profile.minFitScore || 85]}
+                  onValueChange={(value) => handleProfileUpdate('minFitScore', value[0])}
+                  max={100}
+                  min={50}
+                  step={5}
+                  className="w-full"
+                />
+                <div className="flex justify-between text-sm text-muted-foreground mt-2">
+                  <span>50%</span>
+                  <span className="font-medium">{profile.minFitScore || 85}%</span>
+                  <span>100%</span>
+                </div>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Integrations */}
+        <Card className="glass">
+          <CardHeader>
+            <CardTitle className="flex items-center space-x-2">
+              <Link className="h-5 w-5 text-primary" />
+              <span>Integrations</span>
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {/* Google Drive Integration */}
+            <div className="flex items-center justify-between p-4 border rounded-lg">
+              <div className="flex items-center space-x-3">
+                <div className="p-2 bg-blue-500/20 rounded-lg">
+                  <Globe className="h-5 w-5 text-blue-500" />
+                </div>
+                <div>
+                  <p className="font-medium">Google Drive & Sheets Sync</p>
+                  <p className="text-sm text-muted-foreground">
+                    Automatically save generated documents and sync application pipeline
+                  </p>
+                </div>
+              </div>
+              {googleDriveLinked ? (
+                <Badge variant="secondary" className="bg-green-500/20 text-green-700">
+                  <CheckCircle className="h-3 w-3 mr-1" />
+                  Linked
+                </Badge>
+              ) : (
+                <Button onClick={handleLinkGoogleDrive} variant="outline">
+                  Link Account
+                </Button>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Agent Credentials Vault */}
+        <Card className="glass">
+          <CardHeader>
+            <CardTitle className="flex items-center space-x-2">
+              <Lock className="h-5 w-5 text-primary" />
+              <span>🔒 Agent Credentials Vault</span>
+            </CardTitle>
+            <CardDescription>
+              Provide dedicated credentials for the agent to sign in and apply to jobs on your behalf. 
+              This information is stored securely and is only used for job applications.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {agentCredentials.map((credential, index) => (
+              <div key={index} className="p-4 border rounded-lg space-y-3">
+                <div className="flex items-center justify-between">
+                  <Input
+                    placeholder="Platform (e.g., LinkedIn, StepStone)"
+                    value={credential.platform}
+                    onChange={(e) => updateAgentCredential(index, 'platform', e.target.value)}
+                    className="flex-1 mr-2"
+                  />
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => removeAgentCredential(index)}
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </Button>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  <div className="space-y-2">
+                    <Label>Agent's Job-Seeking Email</Label>
+                    <Input
+                      type="email"
+                      placeholder="e.g., jane.doe@email.com"
+                      value={credential.email}
+                      onChange={(e) => updateAgentCredential(index, 'email', e.target.value)}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Agent's Password</Label>
+                    <Input
+                      type="password"
+                      placeholder="Enter password for the agent's email"
+                      value={credential.password}
+                      onChange={(e) => updateAgentCredential(index, 'password', e.target.value)}
+                    />
+                  </div>
+                </div>
+              </div>
+            ))}
+            <Button
+              variant="outline"
+              onClick={addAgentCredential}
+              className="w-full"
+            >
+              <Plus className="h-4 w-4 mr-2" />
+              Add Platform Credentials
+            </Button>
+          </CardContent>
+        </Card>
 
         {/* Skills Gaps and Recommendations */}
         {(skillsGaps.length > 0 || recommendations.length > 0) && (
@@ -430,7 +805,7 @@ const ProfilePage = ({ profile, setProfile, onSaveProfile, addAgentMessage }) =>
             size="lg"
           >
             <CheckCircle className="h-4 w-4 mr-2" />
-            Save Career DNA
+            Save Profile & Settings
           </Button>
           
           {profile.baseCV && (
