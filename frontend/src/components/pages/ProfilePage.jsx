@@ -56,6 +56,13 @@ const ProfilePage = ({ profile, setProfile, onSaveProfile, addAgentMessage }) =>
     }
 
     setUploadedFile(file);
+    addAgentMessage("CV uploaded successfully! Click 'Analyze & Build Profile with AI' to extract your professional data.");
+  }, [addAgentMessage]);
+
+  // Handle AI analysis
+  const handleAnalyzeCV = useCallback(async () => {
+    if (!uploadedFile) return;
+
     setIsAnalyzing(true);
     addAgentMessage("Analyzing your CV with AI... This may take a moment.");
 
@@ -64,7 +71,7 @@ const ProfilePage = ({ profile, setProfile, onSaveProfile, addAgentMessage }) =>
       const base64 = await new Promise((resolve) => {
         const reader = new FileReader();
         reader.onload = () => resolve(reader.result.split(',')[1]);
-        reader.readAsDataURL(file);
+        reader.readAsDataURL(uploadedFile);
       });
 
       // Send to backend for AI analysis
@@ -75,8 +82,8 @@ const ProfilePage = ({ profile, setProfile, onSaveProfile, addAgentMessage }) =>
         },
         body: JSON.stringify({
           cvData: base64,
-          filename: file.name,
-          mimeType: file.type
+          filename: uploadedFile.name,
+          mimeType: uploadedFile.type
         }),
       });
 
@@ -89,7 +96,7 @@ const ProfilePage = ({ profile, setProfile, onSaveProfile, addAgentMessage }) =>
           ...profile,
           ...results.extractedData,
           baseCV: base64,
-          baseCVfilename: file.name,
+          baseCVfilename: uploadedFile.name,
           lastAnalyzed: new Date().toISOString()
         };
         
@@ -112,7 +119,7 @@ const ProfilePage = ({ profile, setProfile, onSaveProfile, addAgentMessage }) =>
     } finally {
       setIsAnalyzing(false);
     }
-  }, [profile, setProfile, calculateCompleteness, addAgentMessage]);
+  }, [uploadedFile, profile, setProfile, calculateCompleteness, addAgentMessage]);
 
   // Handle manual profile updates
   const handleProfileUpdate = useCallback((field, value) => {
@@ -178,9 +185,21 @@ const ProfilePage = ({ profile, setProfile, onSaveProfile, addAgentMessage }) =>
                   className="hidden"
                 />
                 {uploadedFile && (
-                  <div className="flex items-center space-x-2 text-sm text-muted-foreground">
-                    <FileText className="h-4 w-4" />
-                    <span>Uploaded: {uploadedFile.name}</span>
+                  <div className="space-y-4">
+                    <div className="flex items-center space-x-2 text-sm text-muted-foreground">
+                      <FileText className="h-4 w-4" />
+                      <span>Uploaded: {uploadedFile.name}</span>
+                    </div>
+                    <div className="flex justify-center">
+                      <Button 
+                        onClick={handleAnalyzeCV}
+                        className="btn-ai"
+                        size="lg"
+                      >
+                        <Brain className="h-4 w-4 mr-2" />
+                        Analyze & Build Profile with AI
+                      </Button>
+                    </div>
                   </div>
                 )}
               </div>
