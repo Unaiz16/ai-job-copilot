@@ -31,12 +31,16 @@ const corsOptions: cors.CorsOptions = {
     const allowedDomainSuffixes = [
         '.google-labs-studio.web.app',
         '.scf.usercontent.goog', // From user logs
-        '.render.com' // Allow backend to be called from other render services
+        '.render.com', // Allow backend to be called from other render services
+        '.netlify.app', // Allow Netlify deployments
+        'localhost' // Allow local development
     ];
 
     try {
         const originHostname = new URL(origin).hostname;
-        if (allowedDomainSuffixes.some(suffix => originHostname.endsWith(suffix))) {
+        if (allowedDomainSuffixes.some(suffix => 
+            originHostname.endsWith(suffix) || originHostname === suffix || originHostname.includes('localhost')
+        )) {
             return callback(null, true); // Allow if origin ends with a whitelisted suffix
         }
     } catch (e: any) {
