@@ -1,0 +1,13 @@
+services:
+  - type: web
+    name: ai-job-copilot-backend
+    env: node
+    buildCommand: cd backend && npm install && npm run build
+    startCommand: cd backend && npm start
+    plan: free
+    region: frankfurt
+    branch: main
+    envVars:
+      - key: NODE_ENV
+        value: production
+

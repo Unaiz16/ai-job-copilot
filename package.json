@@ -1,0 +1,21 @@
+{
+  "name": "ai-job-copilot",
+  "version": "1.0.0",
+  "description": "AI Job Copilot - Automated job search and application system",
+  "scripts": {
+    "install": "cd backend && npm install",
+    "build": "cd backend && npm run build",
+    "start": "cd backend && npm start",
+    "dev": "cd backend && npm run dev",
+    "install:frontend": "cd frontend && npm install",
+    "build:frontend": "cd frontend && npm run build",
+    "dev:frontend": "cd frontend && npm run dev"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Unaiz16/ai-job-copilot.git"
+  },
+  "author": "Unaiz16",
+  "license": "MIT"
+}
+

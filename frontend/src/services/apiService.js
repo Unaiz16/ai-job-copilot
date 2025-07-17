@@ -3,7 +3,7 @@ import config from '../config/environment.js';
 
 class APIService {
   constructor() {
-    this.baseURL = config.api.base;
+    this.baseURL = config.api.baseUrl;
     this.headers = {
       'Content-Type': 'application/json',
       'Accept': 'application/json'
