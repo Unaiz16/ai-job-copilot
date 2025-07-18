@@ -63,7 +63,28 @@ app.use(express.json({ limit: '10mb' }));
 
 // Health Check
 app.get("/api/health", (req: ExpressRequest, res: ExpressResponse) => {
-  res.status(200).send('AI Job Copilot Backend is running!');
+  res.status(200).json({ 
+      message: 'AI Job Copilot Backend is running!', 
+      status: 'healthy',
+      timestamp: new Date().toISOString(),
+      version: '1.0.0'
+  });
+});
+
+// Analytics endpoint
+app.get('/api/analytics', (req: ExpressRequest, res: ExpressResponse) => {
+  const range = req.query.range || '30d';
+  // Mock analytics data since this is not implemented yet
+  res.status(200).json({
+    range,
+    totalApplications: 0,
+    responseRate: 0,
+    interviewRate: 0,
+    successRate: 0,
+    topSkills: [],
+    topCompanies: [],
+    applicationTrends: []
+  });
 });
 
 // Middleware to check for DB and AI connections

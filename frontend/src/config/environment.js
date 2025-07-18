@@ -12,6 +12,12 @@ const config = {
     baseUrl: 'https://ai-job-copilot.onrender.com',
     
     endpoints: {
+      // Health check
+      health: '/api/health',
+      
+      // Analytics endpoint
+      analytics: '/api/analytics',
+      
       // Data endpoints
       profile: '/api/data/profile',
       applications: '/api/data/applications',
