@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useRef } from 'react';
+import React, { useState, useCallback, useRef, useEffect } from 'react';
 import { 
   Upload, 
   FileText, 
@@ -38,57 +38,63 @@ import { Separator } from '@/components/ui/separator';
 import LoadingSpinner from '@/components/ui/LoadingSpinner';
 import config from '@/config/environment';
 
-const ProfilePage = ({ profile, setProfile, onSaveProfile, addAgentMessage }) => {
+const ProfilePage = ({ profile, updateProfile, onSaveProfile, addAgentMessage }) => {
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [isSuggestingRoles, setIsSuggestingRoles] = useState(false);
   const [analysisResults, setAnalysisResults] = useState(null);
   const [uploadedFile, setUploadedFile] = useState(null);
-  const [profileCompleteness, setProfileCompleteness] = useState(0);
-  const [careerDnaScore, setCareerDnaScore] = useState(0);
-  const [skillsGaps, setSkillsGaps] = useState([]);
-  const [recommendations, setRecommendations] = useState([]);
-  const [careerArtifacts, setCareerArtifacts] = useState([]);
+  const [careerArtifacts, setCareerArtifacts] = useState(profile.artifacts || []);
   const [agentCredentials, setAgentCredentials] = useState([]);
-  const [googleDriveLinked, setGoogleDriveLinked] = useState(false);
   const fileInputRef = useRef(null);
 
   // Calculate profile completeness
   const calculateCompleteness = useCallback((profileData) => {
     const fields = [
       'name', 'email', 'summary', 'keySkills', 'yearsOfExperience',
-      'education', 'jobRoles', 'locations', 'linkedinUrl'
+      'education', 'jobRoles', 'locations', 'linkedinUrl', 'baseCV'
     ];
-    const completed = fields.filter(field => profileData[field] && profileData[field].trim()).length;
+    const completed = fields.filter(field => profileData[field] && (typeof profileData[field] === 'string' ? profileData[field].trim() : true)).length;
     return Math.round((completed / fields.length) * 100);
   }, []);
 
-  // Handle file upload
-  const handleFileUpload = useCallback(async (event) => {
+  // Update profile completeness whenever profile changes
+  useEffect(() => {
+    if (profile) {
+      const completeness = calculateCompleteness(profile);
+      updateProfile({ profileCompleteness: completeness }, false); // Don't save immediately
+    }
+  }, [profile, calculateCompleteness, updateProfile]);
+
+  // Handle file selection from the dialog
+  const handleFileSelect = useCallback(async (event) => {
     const file = event.target.files[0];
     if (!file) return;
 
     if (file.type !== 'application/pdf' && !file.type.includes('document')) {
-      addAgentMessage("Please upload a PDF or Word document for CV analysis.");
+      addAgentMessage({ type: 'error', message: "Please upload a PDF or Word document for CV analysis." });
       return;
     }
 
     setUploadedFile(file);
-    addAgentMessage("CV uploaded successfully! Click 'Analyze & Build Profile with AI' to extract your professional data.");
-  }, [addAgentMessage]);
+    addAgentMessage({ type: 'info', message: `Selected file: ${file.name}. Ready to analyze.` });
+    handleAnalyzeCV(file);
+
+  }, [addAgentMessage, handleAnalyzeCV]);
 
   // Handle AI analysis
-  const handleAnalyzeCV = useCallback(async () => {
-    if (!uploadedFile) return;
+  const handleAnalyzeCV = useCallback(async (file) => {
+    if (!file) return;
 
     setIsAnalyzing(true);
-    addAgentMessage("Analyzing your CV with AI... This may take a moment.");
+    addAgentMessage({ type: 'info', message: "Analyzing your CV with AI... This may take a moment." });
 
     try {
       // Convert file to base64
-      const base64 = await new Promise((resolve) => {
+      const base64 = await new Promise((resolve, reject) => {
         const reader = new FileReader();
         reader.onload = () => resolve(reader.result.split(',')[1]);
-        reader.readAsDataURL(uploadedFile);
+        reader.onerror = (error) => reject(error);
+        reader.readAsDataURL(file);
       });
 
       // Send to backend for AI analysis
@@ -98,11 +104,14 @@ const ProfilePage = ({ profile, setProfile, onSaveProfile, addAgentMessage }) =>
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          cvData: base64,
-          filename: uploadedFile.name,
-          mimeType: uploadedFile.type,
+          cvData: {
+            file: {
+              data: base64,
+              mimeType: file.type
+            }
+          },
           linkedinUrl: profile.linkedinUrl || '',
-          careerArtifacts: careerArtifacts
+          artifacts: careerArtifacts
         }),
       });
 
@@ -111,39 +120,33 @@ const ProfilePage = ({ profile, setProfile, onSaveProfile, addAgentMessage }) =>
         setAnalysisResults(results);
         
         // Update profile with extracted data
-        const updatedProfile = {
-          ...profile,
-          ...results.extractedData,
+        const updatedProfileData = {
+          ...results, // Backend returns data directly
           baseCV: base64,
-          baseCVfilename: uploadedFile.name,
+          baseCVfilename: file.name,
           lastAnalyzed: new Date().toISOString()
         };
         
-        setProfile(updatedProfile);
+        updateProfile(updatedProfileData, true); // Save to backend
         
-        // Calculate scores and gaps
-        const completeness = calculateCompleteness(updatedProfile);
-        setProfileCompleteness(completeness);
-        setCareerDnaScore(results.careerDnaScore || 75);
-        setSkillsGaps(results.skillsGaps || []);
-        setRecommendations(results.recommendations || []);
-        
-        addAgentMessage(`CV analysis complete! I've extracted your professional data and identified ${results.skillsGaps?.length || 0} areas for improvement.`);
+        addAgentMessage({ type: 'success', message: `CV analysis complete! I've extracted your professional data and updated your Career DNA.` });
       } else {
-        throw new Error('Failed to analyze CV');
+        const errorData = await response.json();
+        throw new Error(errorData.message || 'Failed to analyze CV');
       }
     } catch (error) {
       console.error('CV analysis failed:', error);
-      addAgentMessage("CV analysis failed. Please try again or enter your information manually.");
+      addAgentMessage({ type: 'error', message: `CV analysis failed: ${error.message}` });
     } finally {
       setIsAnalyzing(false);
+      setUploadedFile(null); // Reset after analysis
     }
-  }, [uploadedFile, profile, setProfile, calculateCompleteness, addAgentMessage, careerArtifacts]);
+  }, [profile.linkedinUrl, updateProfile, addAgentMessage, careerArtifacts]);
 
   // Handle role suggestions
   const handleSuggestRoles = useCallback(async () => {
     setIsSuggestingRoles(true);
-    addAgentMessage("Analyzing your profile to suggest optimal job roles...");
+    addAgentMessage({ type: 'info', message: "Analyzing your profile to suggest optimal job roles..." });
 
     try {
       const response = await fetch(`${config.api.baseUrl}${config.api.endpoints.suggestRoles}`, {
@@ -151,61 +154,53 @@ const ProfilePage = ({ profile, setProfile, onSaveProfile, addAgentMessage }) =>
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({
-          profile: profile,
-          currentRoles: profile.jobRoles || ''
-        }),
+        body: JSON.stringify({ profile }),
       });
 
       if (response.ok) {
         const results = await response.json();
-        const suggestedRoles = results.suggestedRoles || [];
+        const suggestedRoles = results.roles || [];
         
-        // Update profile with suggested roles
-        const updatedProfile = {
-          ...profile,
-          jobRoles: suggestedRoles.join(', ')
-        };
-        
-        setProfile(updatedProfile);
-        addAgentMessage(`I've suggested ${suggestedRoles.length} job roles based on your profile: ${suggestedRoles.join(', ')}`);
+        updateProfile({ jobRoles: suggestedRoles.join(', ') }, true);
+        addAgentMessage({ type: 'success', message: `I've suggested ${suggestedRoles.length} job roles based on your profile: ${suggestedRoles.join(', ')}` });
       } else {
         throw new Error('Failed to get role suggestions');
       }
     } catch (error) {
       console.error('Role suggestion failed:', error);
-      addAgentMessage("Role suggestion failed. Please try again or enter roles manually.");
+      addAgentMessage({ type: 'error', message: "Role suggestion failed. Please try again or enter roles manually." });
     } finally {
       setIsSuggestingRoles(false);
     }
-  }, [profile, setProfile, addAgentMessage]);
+  }, [profile, updateProfile, addAgentMessage]);
 
   // Handle manual profile updates
-  const handleProfileUpdate = useCallback((field, value) => {
-    const updatedProfile = { ...profile, [field]: value };
-    setProfile(updatedProfile);
-    setProfileCompleteness(calculateCompleteness(updatedProfile));
-  }, [profile, setProfile, calculateCompleteness]);
+  const handleProfileUpdate = (field, value) => {
+    updateProfile({ [field]: value }, false); // Update locally, don't save immediately
+  };
 
   // Handle career artifacts
   const addCareerArtifact = useCallback(() => {
-    setCareerArtifacts([...careerArtifacts, { type: '', content: '', description: '' }]);
-  }, [careerArtifacts]);
+    setCareerArtifacts(prev => [...prev, { type: '', content: '', description: '' }]);
+  }, []);
 
   const updateCareerArtifact = useCallback((index, field, value) => {
     const updated = [...careerArtifacts];
     updated[index][field] = value;
     setCareerArtifacts(updated);
-  }, [careerArtifacts]);
+    updateProfile({ artifacts: updated }, false);
+  }, [careerArtifacts, updateProfile]);
 
   const removeCareerArtifact = useCallback((index) => {
-    setCareerArtifacts(careerArtifacts.filter((_, i) => i !== index));
-  }, [careerArtifacts]);
+    const updated = careerArtifacts.filter((_, i) => i !== index);
+    setCareerArtifacts(updated);
+    updateProfile({ artifacts: updated }, false);
+  }, [careerArtifacts, updateProfile]);
 
   // Handle agent credentials
   const addAgentCredential = useCallback(() => {
-    setAgentCredentials([...agentCredentials, { platform: '', email: '', password: '' }]);
-  }, [agentCredentials]);
+    setAgentCredentials(prev => [...prev, { platform: '', email: '', password: '' }]);
+  }, []);
 
   const updateAgentCredential = useCallback((index, field, value) => {
     const updated = [...agentCredentials];
@@ -220,34 +215,25 @@ const ProfilePage = ({ profile, setProfile, onSaveProfile, addAgentMessage }) =>
   // Handle Google Drive linking
   const handleLinkGoogleDrive = useCallback(async () => {
     try {
-      // This would typically open a Google OAuth window
-      addAgentMessage("Opening Google Drive authentication...");
-      // Mock implementation - in real app this would handle OAuth
+      addAgentMessage({ type: 'info', message: "Opening Google Drive authentication..." });
       setTimeout(() => {
-        setGoogleDriveLinked(true);
-        addAgentMessage("Google Drive linked successfully! Created 'AI Job Copilot Applications' folder and 'My Application Pipeline' sheet.");
+        updateProfile({ gdriveLinked: true }, true);
+        addAgentMessage({ type: 'success', message: "Google Drive linked successfully! Created 'AI Job Copilot Applications' folder and 'My Application Pipeline' sheet." });
       }, 2000);
     } catch (error) {
-      addAgentMessage("Failed to link Google Drive. Please try again.");
+      addAgentMessage({ type: 'error', message: "Failed to link Google Drive. Please try again." });
     }
-  }, [addAgentMessage]);
+  }, [addAgentMessage, updateProfile]);
 
   // Save profile
   const handleSaveProfile = useCallback(async () => {
-    const profileData = {
-      ...profile,
-      careerArtifacts,
-      agentCredentials,
-      googleDriveLinked
-    };
-    
-    const success = await onSaveProfile(profileData);
+    const success = await onSaveProfile(profile);
     if (success) {
-      addAgentMessage("Your Living Career DNA has been updated successfully!");
+      addAgentMessage({ type: 'success', message: "Your Living Career DNA has been updated successfully!" });
     } else {
-      addAgentMessage("Failed to save profile. Please try again.");
+      addAgentMessage({ type: 'error', message: "Failed to save profile. Please try again." });
     }
-  }, [profile, onSaveProfile, addAgentMessage, careerArtifacts, agentCredentials, googleDriveLinked]);
+  }, [profile, onSaveProfile, addAgentMessage]);
 
   return (
     <div className="container mx-auto px-4 sm:px-6 lg:px-8 py-8">
@@ -259,7 +245,7 @@ const ProfilePage = ({ profile, setProfile, onSaveProfile, addAgentMessage }) =>
           </h1>
           <p className="text-lg text-muted-foreground mb-8">
             This is the agent's brain. Provide your CV, LinkedIn, and any other "artifacts" like past job descriptions or project notes. 
-            How well the AI synthesizes them into a powerful unified profile.
+            The AI will synthesize them into a powerful unified profile.
           </p>
         </div>
 
@@ -268,14 +254,22 @@ const ProfilePage = ({ profile, setProfile, onSaveProfile, addAgentMessage }) =>
           <CardHeader>
             <CardTitle className="flex items-center space-x-2">
               <Brain className="h-5 w-5 text-primary" />
-              <span>Upload CV File</span>
+              <span>Upload CV to Build Profile</span>
             </CardTitle>
             <CardDescription>
-              Parse CV Text
+              The fastest way to build your profile. The AI will do the work.
             </CardDescription>
           </CardHeader>
           <CardContent>
-            {!isAnalyzing ? (
+            {isAnalyzing ? (
+              <div className="py-8">
+                <LoadingSpinner 
+                  size="lg" 
+                  message="Analyzing CV with AI... Extracting skills, experience, and identifying opportunities for improvement."
+                  aiMode 
+                />
+              </div>
+            ) : (
               <div className="space-y-4">
                 <div 
                   className="border-2 border-dashed border-border rounded-lg p-8 text-center cursor-pointer hover:border-primary/50 transition-colors"
@@ -283,45 +277,25 @@ const ProfilePage = ({ profile, setProfile, onSaveProfile, addAgentMessage }) =>
                 >
                   <Upload className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
                   <p className="text-lg font-medium mb-2">
-                    Upload a file or drag and drop
+                    Click to upload a file or drag and drop
                   </p>
                   <p className="text-sm text-muted-foreground">
-                    PDF, DOCX, TXT
+                    PDF, DOC, DOCX, TXT
                   </p>
                 </div>
                 <input
                   ref={fileInputRef}
                   type="file"
                   accept=".pdf,.doc,.docx,.txt"
-                  onChange={handleFileUpload}
+                  onChange={handleFileSelect}
                   className="hidden"
                 />
-                {uploadedFile && (
-                  <div className="space-y-4">
-                    <div className="flex items-center space-x-2 text-sm text-muted-foreground">
-                      <FileText className="h-4 w-4" />
-                      <span>Uploaded: {uploadedFile.name}</span>
-                    </div>
-                    <div className="flex justify-center">
-                      <Button 
-                        onClick={handleAnalyzeCV}
-                        className="btn-ai"
-                        size="lg"
-                      >
-                        <Brain className="h-4 w-4 mr-2" />
-                        Analyze & Build Profile with AI
-                      </Button>
-                    </div>
+                {profile.baseCVfilename && (
+                  <div className="flex items-center justify-center space-x-2 text-sm text-muted-foreground pt-4">
+                    <FileText className="h-4 w-4" />
+                    <span>Current CV: {profile.baseCVfilename}</span>
                   </div>
                 )}
-              </div>
-            ) : (
-              <div className="py-8">
-                <LoadingSpinner 
-                  size="lg" 
-                  message="Analyzing CV with AI... Extracting skills, experience, and identifying opportunities for improvement."
-                  aiMode 
-                />
               </div>
             )}
           </CardContent>
@@ -390,10 +364,10 @@ const ProfilePage = ({ profile, setProfile, onSaveProfile, addAgentMessage }) =>
                 </div>
                 <div>
                   <p className="text-sm text-muted-foreground">Profile Completeness</p>
-                  <p className="text-2xl font-bold">{profileCompleteness}%</p>
+                  <p className="text-2xl font-bold">{profile.profileCompleteness || 0}%</p>
                 </div>
               </div>
-              <Progress value={profileCompleteness} className="h-2" />
+              <Progress value={profile.profileCompleteness || 0} className="h-2" />
             </CardContent>
           </Card>
 
@@ -405,10 +379,10 @@ const ProfilePage = ({ profile, setProfile, onSaveProfile, addAgentMessage }) =>
                 </div>
                 <div>
                   <p className="text-sm text-muted-foreground">Career DNA Score</p>
-                  <p className="text-2xl font-bold">{careerDnaScore}/100</p>
+                  <p className="text-2xl font-bold">{profile.careerDnaScore || 0}/100</p>
                 </div>
               </div>
-              <Progress value={careerDnaScore} className="h-2" />
+              <Progress value={profile.careerDnaScore || 0} className="h-2" />
             </CardContent>
           </Card>
 
@@ -420,7 +394,7 @@ const ProfilePage = ({ profile, setProfile, onSaveProfile, addAgentMessage }) =>
                 </div>
                 <div>
                   <p className="text-sm text-muted-foreground">Skills Gaps</p>
-                  <p className="text-2xl font-bold">{skillsGaps.length}</p>
+                  <p className="text-2xl font-bold">{profile.skillsGaps?.length || 0}</p>
                 </div>
               </div>
               <p className="text-xs text-muted-foreground">Areas for improvement</p>
@@ -620,8 +594,8 @@ const ProfilePage = ({ profile, setProfile, onSaveProfile, addAgentMessage }) =>
               </p>
               <div className="px-4">
                 <Slider
-                  value={[profile.minFitScore || 85]}
-                  onValueChange={(value) => handleProfileUpdate('minFitScore', value[0])}
+                  value={[profile.minimumFitScore || 85]}
+                  onValueChange={(value) => handleProfileUpdate('minimumFitScore', value[0])}
                   max={100}
                   min={50}
                   step={5}
@@ -629,7 +603,7 @@ const ProfilePage = ({ profile, setProfile, onSaveProfile, addAgentMessage }) =>
                 />
                 <div className="flex justify-between text-sm text-muted-foreground mt-2">
                   <span>50%</span>
-                  <span className="font-medium">{profile.minFitScore || 85}%</span>
+                  <span className="font-medium">{profile.minimumFitScore || 85}%</span>
                   <span>100%</span>
                 </div>
               </div>
@@ -659,7 +633,7 @@ const ProfilePage = ({ profile, setProfile, onSaveProfile, addAgentMessage }) =>
                   </p>
                 </div>
               </div>
-              {googleDriveLinked ? (
+              {profile.gdriveLinked ? (
                 <Badge variant="secondary" className="bg-green-500/20 text-green-700">
                   <CheckCircle className="h-3 w-3 mr-1" />
                   Linked
@@ -735,67 +709,6 @@ const ProfilePage = ({ profile, setProfile, onSaveProfile, addAgentMessage }) =>
             </Button>
           </CardContent>
         </Card>
-
-        {/* Skills Gaps and Recommendations */}
-        {(skillsGaps.length > 0 || recommendations.length > 0) && (
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-            {/* Skills Gaps */}
-            {skillsGaps.length > 0 && (
-              <Card className="glass">
-                <CardHeader>
-                  <CardTitle className="flex items-center space-x-2">
-                    <AlertCircle className="h-5 w-5 text-chart-3" />
-                    <span>Skills Gaps Identified</span>
-                  </CardTitle>
-                  <CardDescription>
-                    Areas where you can strengthen your profile
-                  </CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <div className="space-y-3">
-                    {skillsGaps.map((gap, index) => (
-                      <div key={index} className="flex items-start space-x-3 p-3 bg-chart-3/10 rounded-lg">
-                        <AlertCircle className="h-4 w-4 text-chart-3 mt-0.5" />
-                        <div>
-                          <p className="font-medium text-sm">{gap.skill}</p>
-                          <p className="text-xs text-muted-foreground">{gap.reason}</p>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </CardContent>
-              </Card>
-            )}
-
-            {/* AI Recommendations */}
-            {recommendations.length > 0 && (
-              <Card className="glass">
-                <CardHeader>
-                  <CardTitle className="flex items-center space-x-2">
-                    <Zap className="h-5 w-5 text-primary" />
-                    <span>AI Recommendations</span>
-                  </CardTitle>
-                  <CardDescription>
-                    Strategic suggestions to improve your career prospects
-                  </CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <div className="space-y-3">
-                    {recommendations.map((rec, index) => (
-                      <div key={index} className="flex items-start space-x-3 p-3 bg-primary/10 rounded-lg">
-                        <CheckCircle className="h-4 w-4 text-primary mt-0.5" />
-                        <div>
-                          <p className="font-medium text-sm">{rec.title}</p>
-                          <p className="text-xs text-muted-foreground">{rec.description}</p>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </CardContent>
-              </Card>
-            )}
-          </div>
-        )}
 
         {/* Action Buttons */}
         <div className="flex justify-center space-x-4">

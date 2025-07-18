@@ -9,34 +9,32 @@ const config = {
   
   // API Configuration
   api: {
-    baseUrl: isProduction 
-      ? 'https://ai-job-copilot.onrender.com'
-      : 'https://ai-job-copilot.onrender.com',
+    baseUrl: 'https://ai-job-copilot.onrender.com',
     
     endpoints: {
       // Data endpoints
       profile: '/api/data/profile',
-      applications: '/api/applications',
-      experiments: '/api/experiments',
+      applications: '/api/data/applications',
+      experiments: '/api/data/experiments',
       
       // AI endpoints
-      extractProfile: '/api/ai/extract-profile',
-      suggestRoles: '/api/ai/suggest-roles',
-      generateJobs: '/api/ai/generate-jobs',
-      generateCV: '/api/ai/generate-cv',
-      generateCoverLetter: '/api/ai/cover-letter',
-      generateInterviewPrep: '/api/ai/interview-prep',
-      analyzePerformance: '/api/analytics',
+      extractProfile: '/api/ai/extract-profile',  // Main endpoint for CV analysis
+      suggestRoles: '/api/ai/suggest-roles',      // Get AI role suggestions
+      generateJobs: '/api/ai/generate-jobs',      // Generate matching jobs
+      generateCV: '/api/ai/generate-cv',          // Generate CV from profile
+      generateCoverLetter: '/api/ai/generate-cover-letter',
+      interviewPrep: '/api/ai/interview-prep',
+      analyzePerformance: '/api/ai/performance-insights',
       analyzeAudio: '/api/ai/analyze-audio',
       
       // Automation endpoints
-      easyApply: '/api/automation/apply',
-      complexApply: '/api/automation/apply',
+      easyApply: '/api/automation/easy-apply',
+      complexApply: '/api/automation/complex-apply',
       
       // Google Drive endpoints
       saveFile: '/api/gdrive/save-file',
       createSheet: '/api/gdrive/create-sheet',
-      syncSheet: '/api/gdrive/sync-sheet'
+      syncSheet: '/api/gdrive/sync-to-sheet'
     }
   },
   
