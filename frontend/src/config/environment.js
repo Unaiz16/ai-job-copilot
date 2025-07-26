@@ -1,4 +1,5 @@
 // Environment configuration for AI Job Copilot
+// Updated: 2025-07-26 - Fixed API endpoint paths for data endpoints
 
 const isDevelopment = import.meta.env.DEV;
 const isProduction = import.meta.env.PROD;
