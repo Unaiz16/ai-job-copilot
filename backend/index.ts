@@ -233,24 +233,6 @@ dataRouter.get('/experiments', async (req: ExpressRequest, res: ExpressResponse)
 });
 dataRouter.post('/experiments', (req: ExpressRequest, res: ExpressResponse) => syncTable(req, res, 'experiments', coreExperimentColumns));
 
-// Analytics
-dataRouter.get('/analytics', async (req: ExpressRequest, res: ExpressResponse) => {
-    try {
-        // Mock analytics data for now
-        const mockAnalytics = {
-            totalApplications: 0,
-            responseRate: 0,
-            interviewRate: 0,
-            averageResponseTime: 0,
-            platforms: [],
-            recentActivity: []
-        };
-        res.status(200).json(mockAnalytics);
-    } catch (e: any) {
-        handleApiError(e, res, 'getAnalytics');
-    }
-});
-
 app.use('/api/data', checkDbConnection, dataRouter);
 
 
@@ -1033,11 +1015,5 @@ app.listen(port, () => {
     console.log("[server]: Gemini API key found.");
   }
 });
-
-
-
-
-console.log("[server]: SUPABASE_URL from env:", process.env.SUPABASE_URL);
-console.log("[server]: SUPABASE_ANON_KEY from env:", process.env.SUPABASE_ANON_KEY);
 
 
