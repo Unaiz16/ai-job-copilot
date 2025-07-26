@@ -415,33 +415,347 @@ aiRouter.post('/clarifying-questions', async (req: ExpressRequest, res: ExpressR
     }
 });
 
+aiRouter.post('/generate-interview-prep', async (req: ExpressRequest, res: ExpressResponse) => {
+    const { profile, job } = req.body;
+    const prompt = `Act as a senior HR professional and interview coach. Create a comprehensive interview preparation kit for the following job application.
+
+User's Profile:
+- Name: ${profile.name ?? ''}
+- Summary: ${profile.summary ?? ''}
+- Key Skills: ${profile.keySkills ?? ''}
+- Experience: ${profile.yearsOfExperience ?? ''}
+
+Target Job:
+- Company: ${job.company ?? ''}
+- Title: ${job.title ?? ''}
+- Description: ${job.description ?? ''}
+
+Create a JSON response with the following structure:
+{
+  "companyResearch": "Brief company background and culture insights",
+  "roleAnalysis": "Key responsibilities and requirements breakdown",
+  "likelyQuestions": ["Array of 8-10 likely interview questions"],
+  "suggestedAnswers": ["Array of suggested answer frameworks for each question"],
+  "questionsToAsk": ["Array of 5-6 thoughtful questions to ask the interviewer"],
+  "preparationTips": ["Array of 5-7 specific preparation tips"]
+}`;
+
+    try {
+        const response = await ai!.models.generateContent({ model: 'gemini-2.5-flash', contents: prompt });
+        res.status(200).json(safeJsonParse(response.text ?? '{}'));
+    } catch (error: any) {
+        handleApiError(error, res, 'generate-interview-prep');
+    }
+});
+
+aiRouter.post('/analyze-job-fit', async (req: ExpressRequest, res: ExpressResponse) => {
+    const { profile, jobDescription } = req.body;
+    const prompt = `Act as an expert career counselor. Analyze how well this candidate profile matches the given job description.
+
+Candidate Profile:
+- Summary: ${profile.summary ?? ''}
+- Key Skills: ${profile.keySkills ?? ''}
+- Experience: ${profile.yearsOfExperience ?? ''}
+- Education: ${profile.education ?? ''}
+
+Job Description:
+${jobDescription ?? ''}
+
+Provide a detailed analysis in JSON format:
+{
+  "fitScore": 85,
+  "strengths": ["Array of matching qualifications and skills"],
+  "gaps": ["Array of missing or weak areas"],
+  "recommendations": ["Array of suggestions to improve candidacy"],
+  "reasoning": "Detailed explanation of the fit score"
+}`;
+
+    try {
+        const response = await ai!.models.generateContent({ model: 'gemini-2.5-flash', contents: prompt });
+        res.status(200).json(safeJsonParse(response.text ?? '{}'));
+    } catch (error: any) {
+        handleApiError(error, res, 'analyze-job-fit');
+    }
+});
+
 app.use('/api/ai', checkAiConnection, aiRouter);
 
 // --- Automation Routes ---
 const automationRouter = express.Router();
 
+automationRouter.post('/schedule-application', async (req: ExpressRequest, res: ExpressResponse) => {
+    try {
+        const { jobId, scheduledTime, applicationData } = req.body;
+        
+        // Create automation task
+        const task = {
+            id: `auto_${Date.now()}`,
+            user_id: DUMMY_USER_UUID,
+            task_type: 'application_submit',
+            status: 'pending',
+            parameters: {
+                jobId,
+                scheduledTime,
+                applicationData
+            },
+            created_at: new Date().toISOString()
+        };
+
+        const { data, error } = await supabase!.from('automation_tasks').insert(task).select().single();
+        
+        if (error) {
+            return handleApiError(error, res, 'schedule-application');
+        }
+        
+        res.status(200).json(data);
+    } catch (error: any) {
+        handleApiError(error, res, 'schedule-application');
+    }
+});
+
+automationRouter.get('/tasks', async (req: ExpressRequest, res: ExpressResponse) => {
+    try {
+        const { data, error } = await supabase!.from('automation_tasks').select('*').eq('user_id', DUMMY_USER_UUID);
+        if (error) return handleApiError(error, res, 'get-automation-tasks');
+        res.status(200).json(data);
+    } catch (e: any) {
+        handleApiError(e, res, 'get-automation-tasks');
+    }
+});
+
+automationRouter.post('/execute-task/:taskId', async (req: ExpressRequest, res: ExpressResponse) => {
+    try {
+        const { taskId } = req.params;
+        
+        // Update task status to running
+        const { error: updateError } = await supabase!
+            .from('automation_tasks')
+            .update({ 
+                status: 'running', 
+                started_at: new Date().toISOString() 
+            })
+            .eq('id', taskId);
+            
+        if (updateError) {
+            return handleApiError(updateError, res, 'execute-task-update');
+        }
+        
+        // Mock execution logic - in real implementation, this would handle the actual automation
+        setTimeout(async () => {
+            const { error: completeError } = await supabase!
+                .from('automation_tasks')
+                .update({ 
+                    status: 'completed', 
+                    completed_at: new Date().toISOString(),
+                    progress: 100,
+                    results: { message: 'Task completed successfully' }
+                })
+                .eq('id', taskId);
+                
+            if (completeError) {
+                console.error('Error completing task:', completeError);
+            }
+        }, 5000); // Simulate 5 second execution
+        
+        res.status(200).json({ message: 'Task execution started', taskId });
+    } catch (error: any) {
+        handleApiError(error, res, 'execute-task');
+    }
+});
+
+// Google Drive integration routes
 const gdriveRouter = express.Router();
 
 gdriveRouter.post('/upload', async (req: ExpressRequest, res: ExpressResponse) => {
     try {
-        // Mock implementation for Google Drive upload
-        const { fileName, content } = req.body;
+        const { fileName, content, folderId } = req.body;
         
-        // In a real implementation, this would upload to Google Drive
+        // Mock implementation for Google Drive upload
+        // In a real implementation, this would use Google Drive API
         const mockGdriveUrl = `https://drive.google.com/file/d/mock-file-id-${Date.now()}/view`;
         
         res.status(200).json({
             success: true,
             url: mockGdriveUrl,
-            fileName: fileName
+            fileName: fileName,
+            folderId: folderId || 'root'
         });
     } catch (error: any) {
         handleApiError(error, res, 'gdrive-upload');
     }
 });
 
+gdriveRouter.post('/create-folder', async (req: ExpressRequest, res: ExpressResponse) => {
+    try {
+        const { folderName, parentFolderId } = req.body;
+        
+        // Mock implementation for Google Drive folder creation
+        const mockFolderId = `folder-${Date.now()}`;
+        const mockFolderUrl = `https://drive.google.com/drive/folders/${mockFolderId}`;
+        
+        res.status(200).json({
+            success: true,
+            folderId: mockFolderId,
+            folderUrl: mockFolderUrl,
+            folderName: folderName
+        });
+    } catch (error: any) {
+        handleApiError(error, res, 'gdrive-create-folder');
+    }
+});
+
+gdriveRouter.get('/files', async (req: ExpressRequest, res: ExpressResponse) => {
+    try {
+        const { folderId } = req.query;
+        
+        // Mock implementation for listing Google Drive files
+        const mockFiles = [
+            {
+                id: 'file1',
+                name: 'Resume_John_Doe.pdf',
+                mimeType: 'application/pdf',
+                webViewLink: 'https://drive.google.com/file/d/file1/view',
+                createdTime: new Date().toISOString()
+            },
+            {
+                id: 'file2',
+                name: 'Cover_Letter_TechCorp.docx',
+                mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+                webViewLink: 'https://drive.google.com/file/d/file2/view',
+                createdTime: new Date().toISOString()
+            }
+        ];
+        
+        res.status(200).json({
+            files: mockFiles,
+            folderId: folderId || 'root'
+        });
+    } catch (error: any) {
+        handleApiError(error, res, 'gdrive-list-files');
+    }
+});
+
 automationRouter.use('/gdrive', gdriveRouter);
-app.use('/api/automation', automationRouter);
+
+// Job search automation routes
+automationRouter.post('/search-jobs', async (req: ExpressRequest, res: ExpressResponse) => {
+    try {
+        const { searchCriteria, platforms } = req.body;
+        
+        // Create automation task for job search
+        const task = {
+            id: `search_${Date.now()}`,
+            user_id: DUMMY_USER_UUID,
+            task_type: 'job_search',
+            status: 'pending',
+            parameters: {
+                searchCriteria,
+                platforms: platforms || ['stepstone.de', 'indeed.de', 'xing.com']
+            },
+            created_at: new Date().toISOString()
+        };
+
+        const { data, error } = await supabase!.from('automation_tasks').insert(task).select().single();
+        
+        if (error) {
+            return handleApiError(error, res, 'search-jobs');
+        }
+        
+        res.status(200).json(data);
+    } catch (error: any) {
+        handleApiError(error, res, 'search-jobs');
+    }
+});
+
+automationRouter.post('/bulk-apply', async (req: ExpressRequest, res: ExpressResponse) => {
+    try {
+        const { jobIds, applicationTemplate } = req.body;
+        
+        // Create automation task for bulk application
+        const task = {
+            id: `bulk_${Date.now()}`,
+            user_id: DUMMY_USER_UUID,
+            task_type: 'application_submit',
+            status: 'pending',
+            parameters: {
+                jobIds,
+                applicationTemplate,
+                bulkMode: true
+            },
+            created_at: new Date().toISOString()
+        };
+
+        const { data, error } = await supabase!.from('automation_tasks').insert(task).select().single();
+        
+        if (error) {
+            return handleApiError(error, res, 'bulk-apply');
+        }
+        
+        res.status(200).json(data);
+    } catch (error: any) {
+        handleApiError(error, res, 'bulk-apply');
+    }
+});
+
+app.use('/api/automation', checkDbConnection, automationRouter);
+
+// --- Analytics and Reporting Routes ---
+const analyticsRouter = express.Router();
+
+analyticsRouter.get('/dashboard', async (req: ExpressRequest, res: ExpressResponse) => {
+    try {
+        const { range = '30d' } = req.query;
+        
+        // Mock analytics dashboard data
+        const dashboardData = {
+            range,
+            summary: {
+                totalApplications: 25,
+                responseRate: 32,
+                interviewRate: 12,
+                offerRate: 4
+            },
+            trends: {
+                applications: [5, 8, 3, 7, 2, 9, 4],
+                responses: [1, 2, 1, 3, 0, 2, 1]
+            },
+            topPlatforms: [
+                { name: 'StepStone', applications: 12, responses: 4 },
+                { name: 'Indeed', applications: 8, responses: 2 },
+                { name: 'XING', applications: 5, responses: 2 }
+            ],
+            recentActivity: [
+                { type: 'application', company: 'TechCorp', date: new Date().toISOString() },
+                { type: 'response', company: 'StartupXYZ', date: new Date().toISOString() }
+            ]
+        };
+        
+        res.status(200).json(dashboardData);
+    } catch (error: any) {
+        handleApiError(error, res, 'analytics-dashboard');
+    }
+});
+
+analyticsRouter.get('/performance', async (req: ExpressRequest, res: ExpressResponse) => {
+    try {
+        const performanceData = {
+            averageResponseTime: 7.5,
+            bestPerformingSkills: ['Python', 'React', 'Machine Learning'],
+            improvementAreas: ['Cover letter personalization', 'Application timing'],
+            successFactors: [
+                'Applications sent on Tuesday-Thursday show 23% higher response rate',
+                'Personalized cover letters increase response rate by 18%',
+                'Applications to companies with 50-200 employees show best success rate'
+            ]
+        };
+        
+        res.status(200).json(performanceData);
+    } catch (error: any) {
+        handleApiError(error, res, 'analytics-performance');
+    }
+});
+
+app.use('/api/analytics', checkDbConnection, analyticsRouter);
 
 // Start the server
 app.listen(port, () => {
