@@ -244,7 +244,7 @@ class APIService {
 
   // Analytics API methods
   async getAnalytics(timeRange = '30d') {
-    return this.request(`/api/analytics?range=${timeRange}`);
+    return this.request(/api/data/analytics?range=${timeRange});
   }
 
   async getExperiments() {
