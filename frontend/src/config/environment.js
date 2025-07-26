@@ -1,5 +1,4 @@
 // Environment configuration for AI Job Copilot
-// Updated: 2025-07-26 - Fixed API endpoint paths for data endpoints
 
 const isDevelopment = import.meta.env.DEV;
 const isProduction = import.meta.env.PROD;
@@ -10,38 +9,33 @@ const config = {
   
   // API Configuration
   api: {
-    baseUrl: 'https://ai-job-copilot.onrender.com',
+    base: isProduction 
+      ? 'https://ai-job-copilot.onrender.com'
+      : 'https://ai-job-copilot.onrender.com',
     
     endpoints: {
-      // Health check
-      health: '/api/health',
-      
-      // Analytics endpoint
-      analytics: '/api/analytics',
-      
       // Data endpoints
       profile: '/api/data/profile',
       applications: '/api/data/applications',
       experiments: '/api/data/experiments',
       
       // AI endpoints
-      extractProfile: '/api/ai/extract-profile',  // Main endpoint for CV analysis
-      suggestRoles: '/api/ai/suggest-roles',      // Get AI role suggestions
-      generateJobs: '/api/ai/generate-jobs',      // Generate matching jobs
-      generateCV: '/api/ai/generate-cv',          // Generate CV from profile
+      extractProfile: '/api/ai/extract-profile',
+      generateJobs: '/api/ai/generate-jobs',
+      generateCV: '/api/ai/generate-cv',
       generateCoverLetter: '/api/ai/generate-cover-letter',
-      interviewPrep: '/api/ai/interview-prep',
-      analyzePerformance: '/api/ai/performance-insights',
+      generateInterviewPrep: '/api/ai/interview-prep',
+      analyzePerformance: '/api/data/analytics',
       analyzeAudio: '/api/ai/analyze-audio',
       
       // Automation endpoints
-      easyApply: '/api/automation/easy-apply',
-      complexApply: '/api/automation/complex-apply',
+      easyApply: '/api/automation/apply',
+      complexApply: '/api/automation/apply',
       
       // Google Drive endpoints
       saveFile: '/api/gdrive/save-file',
       createSheet: '/api/gdrive/create-sheet',
-      syncSheet: '/api/gdrive/sync-to-sheet'
+      syncSheet: '/api/gdrive/sync-sheet'
     }
   },
   

@@ -3,7 +3,7 @@ import config from '../config/environment.js';
 
 class APIService {
   constructor() {
-    this.baseURL = config.api.baseUrl;
+    this.baseURL = config.api.base;
     this.headers = {
       'Content-Type': 'application/json',
       'Accept': 'application/json'
@@ -67,7 +67,7 @@ class APIService {
   // Mock data for development/testing when backend is unavailable
   getMockData(endpoint, method) {
     const mockResponses = {
-      '/api/profile': {
+      '/api/data/profile': {
         id: 1,
         fullName: 'John Doe',
         email: 'john.doe@example.com',
@@ -111,7 +111,7 @@ class APIService {
         page: 1,
         totalPages: 1
       },
-      '/api/applications': {
+      '/api/data/applications': {
         applications: [
           {
             id: 1,
@@ -139,7 +139,7 @@ class APIService {
           }
         ]
       },
-      '/api/analytics': {
+      '/api/data/analytics': {
         totalApplications: 24,
         responseRate: 32.5,
         interviewRate: 18.2,
@@ -171,11 +171,11 @@ class APIService {
 
   // Profile API methods
   async getProfile() {
-    return this.request('/api/profile');
+    return this.request('/api/data/profile');
   }
 
   async updateProfile(profileData) {
-    return this.request('/api/profile', {
+    return this.request('/api/data/profile', {
       method: 'PUT',
       body: JSON.stringify(profileData)
     });
@@ -218,11 +218,11 @@ class APIService {
 
   // Application API methods
   async getApplications() {
-    return this.request('/api/applications');
+    return this.request('/api/data/applications');
   }
 
   async submitApplication(applicationData) {
-    return this.request('/api/applications', {
+    return this.request('/api/data/applications', {
       method: 'POST',
       body: JSON.stringify(applicationData)
     });
@@ -248,11 +248,11 @@ class APIService {
   }
 
   async getExperiments() {
-    return this.request('/api/experiments');
+    return this.request('/api/data/experiments');
   }
 
   async createExperiment(experimentData) {
-    return this.request('/api/experiments', {
+    return this.request('/api/data/experiments', {
       method: 'POST',
       body: JSON.stringify(experimentData)
     });
