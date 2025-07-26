@@ -1035,3 +1035,9 @@ app.listen(port, () => {
 });
 
 
+
+
+console.log("[server]: SUPABASE_URL from env:", process.env.SUPABASE_URL);
+console.log("[server]: SUPABASE_ANON_KEY from env:", process.env.SUPABASE_ANON_KEY);
+
+
