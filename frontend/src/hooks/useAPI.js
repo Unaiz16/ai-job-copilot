@@ -52,13 +52,13 @@ export const useAPI = () => {
     // Job search methods
     searchJobs: (params) => executeRequest(apiService.searchJobs, params),
     getJobDetails: (id) => executeRequest(apiService.getJobDetails, id),
-    calculateFitScore: (jobId, profileId) => executeRequest(apiService.calculateFitScore, jobId, profileId),
+    calculateFitScore: (profile, jobDescription) => executeRequest(apiService.calculateFitScore, profile, jobDescription),
     
     // Application methods
     getApplications: () => executeRequest(apiService.getApplications),
     submitApplication: (data) => executeRequest(apiService.submitApplication, data),
     updateApplicationStatus: (id, status) => executeRequest(apiService.updateApplicationStatus, id, status),
-    generateCoverLetter: (jobId, profileId) => executeRequest(apiService.generateCoverLetter, jobId, profileId),
+    generateCoverLetter: (profile, job) => executeRequest(apiService.generateCoverLetter, profile, job),
     
     // Analytics methods
     getAnalytics: (range) => executeRequest(apiService.getAnalytics, range),

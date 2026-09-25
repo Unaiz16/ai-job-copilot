@@ -9,9 +9,7 @@ const config = {
   
   // API Configuration
   api: {
-    base: isProduction 
-      ? 'https://ai-job-copilot.onrender.com'
-      : 'https://ai-job-copilot.onrender.com',
+    base: import.meta.env.VITE_API_BASE_URL || 'https://ai-job-copilot.onrender.com',
     
     endpoints: {
       // Data endpoints
@@ -19,12 +17,14 @@ const config = {
       applications: '/api/data/applications',
       experiments: '/api/data/experiments',
       
-      // AI endpoints
+      // AI endpoints (Gemini runs on the backend; no AI keys in the browser)
       extractProfile: '/api/ai/extract-profile',
+      clarifyingQuestions: '/api/ai/clarifying-questions',
       generateJobs: '/api/ai/generate-jobs',
       generateCV: '/api/ai/generate-cv',
       generateCoverLetter: '/api/ai/generate-cover-letter',
-      generateInterviewPrep: '/api/ai/interview-prep',
+      generateInterviewPrep: '/api/ai/generate-interview-prep',
+      analyzeJobFit: '/api/ai/analyze-job-fit',
       analyzePerformance: '/api/data/analytics',
       analyzeAudio: '/api/ai/analyze-audio',
       

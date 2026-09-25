@@ -193,7 +193,7 @@ class APIService {
   }
 
   async analyzeCV(cvData) {
-    return this.request('/api/ai/analyze-cv', {
+    return this.request(config.api.endpoints.extractProfile, {
       method: 'POST',
       body: JSON.stringify({ cvData })
     });
@@ -209,10 +209,10 @@ class APIService {
     return this.request(`/api/jobs/${jobId}`);
   }
 
-  async calculateFitScore(jobId, profileId) {
-    return this.request('/api/ai/fit-score', {
+  async calculateFitScore(profile, jobDescription) {
+    return this.request(config.api.endpoints.analyzeJobFit, {
       method: 'POST',
-      body: JSON.stringify({ jobId, profileId })
+      body: JSON.stringify({ profile, jobDescription })
     });
   }
 
@@ -235,10 +235,10 @@ class APIService {
     });
   }
 
-  async generateCoverLetter(jobId, profileId) {
-    return this.request('/api/ai/cover-letter', {
+  async generateCoverLetter(profile, job) {
+    return this.request(config.api.endpoints.generateCoverLetter, {
       method: 'POST',
-      body: JSON.stringify({ jobId, profileId })
+      body: JSON.stringify({ profile, job })
     });
   }
 

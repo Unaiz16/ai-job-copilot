@@ -12,12 +12,15 @@ const app: express.Express = express();
 const port = process.env.PORT || 3001;
 
 // --- Initialize Gemini ---
+// The key stays server-side; the frontend only ever talks to /api/ai/*.
+// API_KEY is still accepted for existing deployments.
+const geminiApiKey = process.env.GEMINI_API_KEY || process.env.API_KEY;
 let ai: GoogleGenAI | null = null;
-if (process.env.API_KEY) {
-  ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+if (geminiApiKey) {
+  ai = new GoogleGenAI({ apiKey: geminiApiKey });
   console.log('[server]: GoogleGenAI client initialized successfully.');
 } else {
-  console.warn('[server]: IMPORTANT - API_KEY (for Gemini) is not set. AI functionality will be disabled.');
+  console.warn('[server]: IMPORTANT - GEMINI_API_KEY is not set. AI functionality will be disabled.');
 }
 
 // Middlewares

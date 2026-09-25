@@ -5,13 +5,18 @@ import config from '../config/environment.js';
 
 class BrowserlessService {
   constructor() {
-    this.apiKey = '2ScPWInlwijme789fa327905e827c9f18bcbf40355a447270';
+    // No API key in the browser: anything shipped to the frontend is public.
+    // Browserless automation has to be proxied through the backend.
+    this.apiKey = null;
     this.baseUrl = 'https://chrome.browserless.io';
     this.timeout = 30000; // 30 seconds
   }
 
   // Core automation methods
   async createSession() {
+    if (!this.apiKey) {
+      throw new Error('Browserless automation is disabled in the browser; it must run on the backend.');
+    }
     try {
       const response = await fetch(`${this.baseUrl}/sessions`, {
         method: 'POST',

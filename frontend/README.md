@@ -214,22 +214,19 @@ npm run build
 Create a `.env.local` file with the following variables:
 
 ```env
-# Browserless.io Configuration
-VITE_BROWSERLESS_API_KEY=your_browserless_api_key
-VITE_BROWSERLESS_ENDPOINT=wss://chrome.browserless.io
-
-# Backend API (if using custom backend)
+# Backend API
 VITE_API_BASE_URL=https://your-backend.onrender.com
-
-# OpenAI API (for AI features)
-VITE_OPENAI_API_KEY=your_openai_api_key
 ```
+
+Every `VITE_*` variable ends up in the public JavaScript bundle, so never put
+API keys (Gemini, Browserless, ...) here. AI features call the backend's
+`/api/ai/*` routes, and the keys live in `backend/.env`.
 
 ### Browserless.io Setup
 
 1. Sign up at [Browserless.io](https://browserless.io)
 2. Get your API key from the dashboard
-3. Add the API key to your environment variables
+3. Add the API key to the backend's environment variables (not the frontend)
 4. Configure the endpoint URL in the browserless config
 
 ## 🎨 UI/UX Design

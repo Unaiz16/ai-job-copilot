@@ -68,27 +68,28 @@ const ProfilePage = ({ profile, setProfile, onSaveProfile, addAgentMessage }) =>
       });
 
       // Send to backend for AI analysis
-      const response = await fetch(`${config.api.baseUrl}${config.api.endpoints.extractProfile}`, {
+      const response = await fetch(`${config.api.base}${config.api.endpoints.extractProfile}`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          cvData: base64,
-          filename: file.name,
-          mimeType: file.type
+          cvData: { file: { mimeType: file.type, data: base64 } },
+          linkedinUrl: profile.linkedinUrl,
+          artifacts: profile.artifacts
         }),
       });
 
       if (response.ok) {
         const results = await response.json();
         setAnalysisResults(results);
-        
-        // Update profile with extracted data
+
+        // Update profile with extracted data (the backend returns the fields flat)
+        const { extractedText, ...extractedData } = results;
         const updatedProfile = {
           ...profile,
-          ...results.extractedData,
-          baseCV: base64,
+          ...Object.fromEntries(Object.entries(extractedData).filter(([, value]) => value)),
+          baseCV: extractedText || base64,
           baseCVfilename: file.name,
           lastAnalyzed: new Date().toISOString()
         };

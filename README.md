@@ -50,17 +50,16 @@ npm run dev
 
 ### Environment Variables
 
-#### Frontend (.env in frontend/)
+#### Frontend (.env in frontend/, see `frontend/.env.example`)
 ```
 VITE_API_BASE_URL=https://ai-job-copilot.onrender.com
-VITE_BROWSERLESS_API_KEY=your_browserless_key
-VITE_BROWSERLESS_ENDPOINT=wss://chrome.browserless.io
-VITE_GEMINI_API_KEY=your_gemini_key
 ```
+Every `VITE_*` variable is bundled into the public JavaScript, so never put API keys here.
+All Gemini calls go through the backend's `/api/ai/*` routes.
 
-#### Backend (.env in backend/)
+#### Backend (.env in backend/, see `backend/.env.example`)
 ```
-API_KEY=your_gemini_api_key
+GEMINI_API_KEY=your_gemini_api_key
 SUPABASE_URL=your_supabase_url
 SUPABASE_ANON_KEY=your_supabase_anon_key
 ```
